@@ -1,0 +1,21 @@
+# -----------------------------------------------------------------------
+# NET-8939 - Nightly competitor pricing import: Job + CronJob + Trigger (project data)
+# -----------------------------------------------------------------------
+
+# A Spring bean implementing JobPerformable is not auto-registered as a Job item - CronJob.job is a
+# reference that must resolve against an existing Job row. springId is what actually links this row
+# to the competitorPricingImportJob Spring bean in customservices-spring.xml; code is this item's own
+# identifier and is set to the same value by convention (see acceleratorservices' own
+# essentialdata-acceleratorservices.impex for the platform's own use of this pattern).
+INSERT_UPDATE ServicelayerJob; code[unique=true]              ; springId
+                              ; competitorPricingImportJob     ; competitorPricingImportJob
+
+# One CronJob + Trigger row per tenant/store, all referencing the same Job (NET-8939 revised
+# section 5.3, multi-tenant design). This installation has exactly one real store (electronics);
+# adding a second store later is a pure ImpEx addition - one more CronJob + Trigger pair with its
+# own code, tenantId and catalogVersion, no Java change, no new Job bean.
+INSERT_UPDATE CompetitorPricingImportCronJob; code[unique=true]                          ; job(code)                    ; singleExecutable; tenantId    ; catalogVersion(catalog(id),version)  ; sessionLanguage(isocode)
+                                             ; competitorPricingImportCronJob_electronics ; competitorPricingImportJob   ; true            ; electronics ; electronicsProductCatalog:Staged     ; en
+
+INSERT_UPDATE Trigger; cronjob(code)[unique=true]                    ; cronExpression
+                      ; competitorPricingImportCronJob_electronics    ; 0 0 2 * * ?

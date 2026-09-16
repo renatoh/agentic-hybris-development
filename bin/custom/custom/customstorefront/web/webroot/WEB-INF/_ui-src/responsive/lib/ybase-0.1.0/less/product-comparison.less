@@ -1,0 +1,95 @@
+// NET-8940 - product comparison header icon and comparison page
+
+.product-compare-icon {
+	position: relative;
+	display: inline-block;
+	padding: 10px;
+	color: inherit;
+
+	svg {
+		display: block;
+	}
+}
+
+.product-compare-icon-badge {
+	position: absolute;
+	top: 2px;
+	right: 2px;
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: 8px;
+	background-color: @brand-primary;
+	color: #fff;
+	font-size: 11px;
+	line-height: 16px;
+	text-align: center;
+}
+
+.product-comparison-page {
+	padding: 20px 0;
+
+	.product-comparison-empty {
+		padding: 20px 0;
+	}
+
+	.product-comparison-list-switcher {
+		max-width: 320px;
+		margin-bottom: 20px;
+	}
+
+	.product-comparison-list-label {
+		margin-bottom: 15px;
+	}
+
+	.product-comparison-table-wrap {
+		overflow-x: auto;
+	}
+
+	.product-comparison-table {
+		// Fixed layout + an explicit width per column (below) so one long attribute value can't
+		// stretch its column past its fair share - matches the product-grid table's own
+		// max-width: 200px column cap in order-form.less. No width: 100% here: the table sizes to
+		// the sum of its (fixed-width) columns and product-comparison-table-wrap's overflow-x:auto
+		// scrolls it horizontally once more columns are added than fit the viewport (NET-8940
+		// section 3, "no cap on products per list").
+		table-layout: fixed;
+		border-collapse: collapse;
+
+		th,
+		td {
+			padding: 10px 15px;
+			border: 1px solid @table-border-color;
+			vertical-align: top;
+			text-align: left;
+			word-wrap: break-word;
+			overflow-wrap: break-word;
+		}
+
+		th.product-comparison-row-label,
+		td:first-child {
+			width: 160px;
+			white-space: normal;
+			font-weight: bold;
+			background-color: @gray-lighter;
+			// table th (see tables.less) sets color: @table-head-color (white, for the dark
+			// @table-head-bg header row) - this cell is a <th> too but on a light background, so
+			// it needs the storefront's normal body text color instead, not the inherited white.
+			color: @text-color;
+		}
+
+		th:not(.product-comparison-row-label),
+		td:not(:first-child) {
+			width: 200px;
+		}
+
+		.product-comparison-product-name {
+			font-weight: bold;
+			white-space: normal;
+		}
+
+		.product-comparison-product-price {
+			margin-bottom: 5px;
+		}
+	}
+}

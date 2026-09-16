@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!--
+ Copyright (c) 2021 SAP SE or an SAP affiliate company. All rights reserved.
+-->
+<items xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:noNamespaceSchemaLocation="items.xsd">
+
+	<itemtypes>
+
+		<!--
+		   ====================================================================================
+		   NET-8939 - Nightly competitor pricing import
+		   ====================================================================================
+		-->
+
+		<!--
+		   Extends the existing Product type - no new item type, no deployment/typecode
+		   (NET-8939 section 5.1). BigDecimal rather than the platform's own PriceRow.price (Double):
+		   these are stored facts pulled from an external system, not calculated storefront prices,
+		   and should not pick up floating-point drift. Not localized - a price has no language.
+		-->
+		<itemtype code="Product" autocreate="false" generate="false">
+			<attributes>
+				<attribute qualifier="competitorAveragePrice" type="java.math.BigDecimal">
+					<persistence type="property"/>
+					<modifiers optional="true"/>
+				</attribute>
+				<attribute qualifier="competitorMinPrice" type="java.math.BigDecimal">
+					<persistence type="property"/>
+					<modifiers optional="true"/>
+				</attribute>
+				<attribute qualifier="competitorMaxPrice" type="java.math.BigDecimal">
+					<persistence type="property"/>
+					<modifiers optional="true"/>
+				</attribute>
+			</attributes>
+		</itemtype>
+
+		<!--
+		   Dedicated CronJob subtype carrying the two attributes that make one instance
+		   tenant-specific (NET-8939 revised section 5.3, multi-tenant design). These live here,
+		   not on the shared CronJob base type, because CronJob is used by every cronjob in the
+		   installation (Solr indexers, cart removal, email cleanup, ...) and a shared type cannot
+		   enforce mandatory="true" for only some of its rows. Matches the platform's own
+		   SolrIndexerCronJob pattern: one Job bean, one CronJob row per tenant/store.
+		   customservices is jaloLogicFree="true", so no jaloclass is declared here - the platform
+		   generates a jalo-free-compatible class.
+		-->
+		<itemtype code="CompetitorPricingImportCronJob" autocreate="true" generate="true" extends="CronJob">
+			<attributes>
+				<attribute qualifier="tenantId" type="java.lang.String">
+					<persistence type="property"/>
+					<modifiers optional="false"/>
+					<description>
+						Identifies the tenant/store towards the external competitor pricing system.
+						Not a hybris concept - passed straight through to
+						CompetitorPricingService.getCompetitorPricing(tenantId).
+					</description>
+				</attribute>
+				<attribute qualifier="catalogVersion" type="CatalogVersion">
+					<persistence type="property"/>
+					<modifiers optional="false"/>
+					<description>
+						The exact catalog version this instance writes competitor prices into.
+					</description>
+				</attribute>
+			</attributes>
+		</itemtype>
+
+	</itemtypes>
+
+</items>

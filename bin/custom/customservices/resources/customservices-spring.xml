@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright (c) 2021 SAP SE or an SAP affiliate company. All rights reserved.
+-->
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans
+           http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+	<!--
+	   ============================================================================================
+	   NET-8938 - My Account order history sourced from an external REST endpoint instead of the DB
+	   ============================================================================================
+	-->
+
+	<!--
+	   ====== Service layer (NET-8938 section 5.1) ======
+
+	   Switching from the mock to the real endpoint is done here and nowhere else: change the alias
+	   target below to restCustomOrderHistoryService. No Java and no JSP change is required
+	   (NET-8938 acceptance criterion 6).
+	-->
+	<alias name="mockCustomOrderHistoryService" alias="customOrderHistoryService"/>
+
+	<bean id="mockCustomOrderHistoryService" class="com.custom.orderhistory.service.impl.MockCustomOrderHistoryService">
+		<property name="configurationService" ref="configurationService"/>
+	</bean>
+
+	<bean id="restCustomOrderHistoryService" class="com.custom.orderhistory.service.impl.RestCustomOrderHistoryService">
+		<property name="configurationService" ref="configurationService"/>
+		<property name="restTemplate" ref="customOrderHistoryRestTemplate"/>
+	</bean>
+
+	<!--
+	   Dedicated RestTemplate for the order history call. The timeouts are pushed onto this request
+	   factory per call by RestCustomOrderHistoryService, so a change in HAC takes effect without a
+	   restart (NET-8938 section 5.4). The values below are only the startup defaults.
+	-->
+	<bean id="customOrderHistoryRequestFactory" class="org.springframework.http.client.SimpleClientHttpRequestFactory">
+		<property name="connectTimeout" value="5000"/>
+		<property name="readTimeout" value="10000"/>
+	</bean>
+
+	<bean id="customOrderHistoryRestTemplate" class="org.springframework.web.client.RestTemplate">
+		<constructor-arg ref="customOrderHistoryRequestFactory"/>
+	</bean>
+
+	<!-- ====== Status mapping and conversion to OrderHistoryData (NET-8938 sections 6 and 6.1) ====== -->
+
+	<bean id="customOrderStatusMapper" class="com.custom.orderhistory.populator.CustomOrderStatusMapper"/>
+
+	<bean id="customOrderHistoryPopulator" class="com.custom.orderhistory.populator.CustomOrderHistoryPopulator">
+		<property name="customOrderStatusMapper" ref="customOrderStatusMapper"/>
+		<property name="priceDataFactory" ref="priceDataFactory"/>
+	</bean>
+
+	<bean id="customOrderHistoryConverter" parent="abstractPopulatingConverter">
+		<property name="targetClass" value="de.hybris.platform.commercefacades.order.data.OrderHistoryData"/>
+		<property name="populators">
+			<list>
+				<ref bean="customOrderHistoryPopulator"/>
+			</list>
+		</property>
+	</bean>
+
+	<!-- ====== Conversion to OrderData for the order detail page (NET-8938 section 6.2) ====== -->
+
+	<bean id="customOrderDetailPopulator" class="com.custom.orderhistory.populator.CustomOrderDetailPopulator">
+		<property name="customOrderStatusMapper" ref="customOrderStatusMapper"/>
+		<property name="priceDataFactory" ref="priceDataFactory"/>
+	</bean>
+
+	<bean id="customOrderDetailConverter" parent="abstractPopulatingConverter">
+		<property name="targetClass" value="de.hybris.platform.commercefacades.order.data.OrderData"/>
+		<property name="populators">
+			<list>
+				<ref bean="customOrderDetailPopulator"/>
+			</list>
+		</property>
+	</bean>
+
+	<!--
+	   ====== Facade (NET-8938 sections 5.3 and 5.5) ======
+
+	   parent="defaultOrderFacade" inherits the platform dependency injection, so no platform
+	   collaborator has to be re-declared by hand and every method that is NOT overridden - in
+	   particular the guest/GUID detail variants - keeps the unchanged platform behaviour.
+
+	   The alias replaces the platform facade under its existing name, so AccountPageController
+	   (@Resource(name = "orderFacade")) needs no change. customservices declares commercefacades in
+	   its extensioninfo.xml, therefore it is loaded afterwards and this alias overrides the one
+	   defined in commercefacades-spring.xml.
+	-->
+	<bean id="customOrderFacade" class="com.custom.orderhistory.facade.CustomOrderFacade"
+	      parent="defaultOrderFacade">
+		<property name="customOrderHistoryService" ref="customOrderHistoryService"/>
+		<property name="customOrderHistoryConverter" ref="customOrderHistoryConverter"/>
+		<property name="customOrderDetailConverter" ref="customOrderDetailConverter"/>
+	</bean>
+
+	<alias name="customOrderFacade" alias="orderFacade"/>
+
+	<!--
+	   ============================================================================================
+	   NET-8939 - Nightly competitor pricing import
+	   ============================================================================================
+	-->
+
+	<!--
+	   ====== Service layer (NET-8939 section 5.2) ======
+
+	   Switching from the mock to the real endpoint is done here and nowhere else: change the alias
+	   target below to restCompetitorPricingService. No Java and no ImpEx change is required
+	   (NET-8939 acceptance criterion 5).
+	-->
+	<alias name="mockCompetitorPricingService" alias="competitorPricingService"/>
+
+	<bean id="mockCompetitorPricingService" class="com.custom.competitorpricing.service.impl.MockCompetitorPricingService">
+		<property name="configurationService" ref="configurationService"/>
+	</bean>
+
+	<bean id="restCompetitorPricingService" class="com.custom.competitorpricing.service.impl.RestCompetitorPricingService">
+		<property name="configurationService" ref="configurationService"/>
+		<property name="restTemplate" ref="competitorPricingRestTemplate"/>
+	</bean>
+
+	<!--
+	   Dedicated RestTemplate for the competitor pricing call - a separate instance from
+	   customOrderHistoryRestTemplate (NET-8938), one RestTemplate per integration (NET-8939 section
+	   5.2). The timeouts below are only the startup defaults; RestCompetitorPricingService pushes the
+	   currently configured values onto this request factory per call.
+	-->
+	<bean id="competitorPricingRequestFactory" class="org.springframework.http.client.SimpleClientHttpRequestFactory">
+		<property name="connectTimeout" value="5000"/>
+		<property name="readTimeout" value="10000"/>
+	</bean>
+
+	<bean id="competitorPricingRestTemplate" class="org.springframework.web.client.RestTemplate">
+		<constructor-arg ref="competitorPricingRequestFactory"/>
+	</bean>
+
+	<!-- ====== CronJob (NET-8939 section 5.3) ====== -->
+
+	<bean id="competitorPricingImportJob" class="com.custom.competitorpricing.job.CompetitorPricingImportJob"
+	      parent="abstractJobPerformable">
+		<property name="competitorPricingService" ref="competitorPricingService"/>
+		<property name="productService" ref="productService"/>
+	</bean>
+
+	<!--
+	   ============================================================================================
+	   NET-8940 - Session-scoped product comparison lists
+	   ============================================================================================
+	-->
+
+	<!--
+	   ====== Grouping category resolution (NET-8940 section 5.2) ======
+
+	   productAndCategoryHelper is the platform bean from commerceservices-spring.xml - reused here
+	   exactly as ProductBreadcrumbBuilder reuses it, so ClassificationClass/variant/configuration
+	   categories are excluded from grouping-category resolution the same way they are excluded from
+	   breadcrumbs.
+	-->
+	<bean id="productComparisonGroupingService"
+	      class="com.custom.productcomparison.service.impl.DefaultProductComparisonGroupingService">
+		<property name="configurationService" ref="configurationService"/>
+		<property name="productAndCategoryHelper" ref="productAndCategoryHelper"/>
+	</bean>
+
+	<!-- ====== Session state (NET-8940 section 5.1) ====== -->
+
+	<bean id="productComparisonService" class="com.custom.productcomparison.service.impl.DefaultProductComparisonService">
+		<property name="sessionService" ref="sessionService"/>
+		<property name="productComparisonGroupingService" ref="productComparisonGroupingService"/>
+	</bean>
+
+	<!--
+	   The presentation-facing ProductComparisonFacade (NET-8940 section 5.3/5.4) lives in
+	   customfacades, matching the platform's own core/facades split - see
+	   customfacades-spring.xml.
+	-->
+
+</beans>

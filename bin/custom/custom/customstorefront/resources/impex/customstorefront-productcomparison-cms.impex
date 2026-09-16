@@ -1,0 +1,83 @@
+# -----------------------------------------------------------------------
+# Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+# -----------------------------------------------------------------------
+# NET-8940 - CMS page for the product comparison page.
+#
+# Dedicated PageTemplate (ProductComparePageTemplate), mirroring how the accelerator itself wires
+# a page with a purely JSP/Java-rendered body: LoginPageTemplate's chrome-only slot set
+# (SiteLogo/HeaderLinks/SearchBox/MiniCart/NavigationBar/Footer/TopHeaderSlot/BottomHeaderSlot),
+# with no body-content slot - the comparison page's dropdown + table are entirely JSP/Java
+# rendered, not CMS-component-authored, so there is nothing to put in one.
+#
+# Each chrome position is bound (via ContentSlotForTemplate) to the SAME SHARED ContentSlot
+# instances every other page template uses (SiteLogoSlot, HeaderLinksSlot, SearchBoxSlot,
+# MiniCartSlot, NavigationBarSlot, FooterSlot, TopHeaderSlot, BottomHeaderSlot - no
+# "-ProductComparePage" suffix on the contentSlot column) - not new slot instances - so the header,
+# footer, search box and minicart stay identical to every other page, exactly like
+# CartPageTemplate/LoginPageTemplate do (see electronicsstore's own
+# resources/electronicsstore/import/coredata/contentCatalogs/electronicsContentCatalog/cms-content.impex,
+# read directly for this file's exact pattern).
+#
+# Imported into both Staged and Online: this dev instance's anonymous storefront browsing session
+# resolves CMS content from Online (the original accelerator initialize syncs Staged to Online for
+# the shipped dataset), while Staged is what a CMS editor/preview session sees.
+#
+# Scoped to one content catalog by design (see the sap-commerce-cloud skill's multi-store
+# guidance): a second store/content catalog needs its own equivalent rows here, not a code change.
+$contentCatalog=electronicsContentCatalog
+
+$contentCV=catalogVersion(CatalogVersion.catalog(Catalog.id[default=$contentCatalog]),CatalogVersion.version[default=Staged])[default=$contentCatalog:Staged]
+
+INSERT_UPDATE PageTemplate;$contentCV[unique=true];uid[unique=true];name;frontendTemplateName;restrictedPageTypes(code);active[default=true]
+;;ProductComparePageTemplate;Product Compare Page Template;;ContentPage;false
+
+INSERT_UPDATE ContentSlotName;name[unique=true];template(uid,$contentCV)[unique=true][default='ProductComparePageTemplate'];validComponentTypes(code);compTypeGroup(code)
+;SiteLogo;;;logo
+;HeaderLinks;;;headerlinks
+;SearchBox;;;searchbox
+;MiniCart;;;minicart
+;NavigationBar;;;navigation
+;Footer;;;footer
+;TopHeaderSlot;;;wide
+;BottomHeaderSlot;;;wide
+
+INSERT_UPDATE ContentSlotForTemplate;$contentCV[unique=true];uid[unique=true];position[unique=true];pageTemplate(uid,$contentCV)[unique=true][default='ProductComparePageTemplate'];contentSlot(uid,$contentCV)[unique=true];allowOverwrite
+;;SiteLogo-ProductComparePage;SiteLogo;;SiteLogoSlot;true
+;;HeaderLinks-ProductComparePage;HeaderLinks;;HeaderLinksSlot;true
+;;SearchBox-ProductComparePage;SearchBox;;SearchBoxSlot;true
+;;MiniCart-ProductComparePage;MiniCart;;MiniCartSlot;true
+;;NavigationBar-ProductComparePage;NavigationBar;;NavigationBarSlot;true
+;;Footer-ProductComparePage;Footer;;FooterSlot;true
+;;TopHeaderSlot-ProductComparePage;TopHeaderSlot;;TopHeaderSlot;true
+;;BottomHeaderSlot-ProductComparePage;BottomHeaderSlot;;BottomHeaderSlot;true
+
+INSERT_UPDATE ContentPage;$contentCV[unique=true];uid[unique=true];name;masterTemplate(uid,$contentCV);label;defaultPage[default='true'];approvalStatus(code)[default='approved'];homepage[default='false']
+;;productComparePage;Product Compare Page;ProductComparePageTemplate;product-compare
+
+$contentCV=catalogVersion(CatalogVersion.catalog(Catalog.id[default=$contentCatalog]),CatalogVersion.version[default=Online])[default=$contentCatalog:Online]
+
+INSERT_UPDATE PageTemplate;$contentCV[unique=true];uid[unique=true];name;frontendTemplateName;restrictedPageTypes(code);active[default=true]
+;;ProductComparePageTemplate;Product Compare Page Template;;ContentPage;false
+
+INSERT_UPDATE ContentSlotName;name[unique=true];template(uid,$contentCV)[unique=true][default='ProductComparePageTemplate'];validComponentTypes(code);compTypeGroup(code)
+;SiteLogo;;;logo
+;HeaderLinks;;;headerlinks
+;SearchBox;;;searchbox
+;MiniCart;;;minicart
+;NavigationBar;;;navigation
+;Footer;;;footer
+;TopHeaderSlot;;;wide
+;BottomHeaderSlot;;;wide
+
+INSERT_UPDATE ContentSlotForTemplate;$contentCV[unique=true];uid[unique=true];position[unique=true];pageTemplate(uid,$contentCV)[unique=true][default='ProductComparePageTemplate'];contentSlot(uid,$contentCV)[unique=true];allowOverwrite
+;;SiteLogo-ProductComparePage;SiteLogo;;SiteLogoSlot;true
+;;HeaderLinks-ProductComparePage;HeaderLinks;;HeaderLinksSlot;true
+;;SearchBox-ProductComparePage;SearchBox;;SearchBoxSlot;true
+;;MiniCart-ProductComparePage;MiniCart;;MiniCartSlot;true
+;;NavigationBar-ProductComparePage;NavigationBar;;NavigationBarSlot;true
+;;Footer-ProductComparePage;Footer;;FooterSlot;true
+;;TopHeaderSlot-ProductComparePage;TopHeaderSlot;;TopHeaderSlot;true
+;;BottomHeaderSlot-ProductComparePage;BottomHeaderSlot;;BottomHeaderSlot;true
+
+INSERT_UPDATE ContentPage;$contentCV[unique=true];uid[unique=true];name;masterTemplate(uid,$contentCV);label;defaultPage[default='true'];approvalStatus(code)[default='approved'];homepage[default='false']
+;;productComparePage;Product Compare Page;ProductComparePageTemplate;product-compare

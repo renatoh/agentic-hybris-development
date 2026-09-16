@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testclasses><customfacades><testclass>com.custom.facades.suggestion.impl.DefaultSimpleSuggestionFacadeTest</testclass><testclass>com.custom.facades.populators.AcceleratorVariantOptionDataPopulatorTest</testclass><testclass>com.custom.facades.suggestion.DefaultSimpleSuggestionFacadeIntegrationTest</testclass></customfacades></testclasses>

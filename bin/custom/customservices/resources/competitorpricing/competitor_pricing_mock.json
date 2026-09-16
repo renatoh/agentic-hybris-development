@@ -1,0 +1,32 @@
+[
+  {
+    "productCode": "1934793",
+    "averagePrice": 899.00,
+    "minPrice": 849.50,
+    "maxPrice": 949.90
+  },
+  {
+    "productCode": "1099285",
+    "averagePrice": 249.99,
+    "minPrice": 219.00,
+    "maxPrice": 279.50
+  },
+  {
+    "productCode": "1225694",
+    "averagePrice": 1349.00,
+    "minPrice": 1279.00,
+    "maxPrice": 1429.00
+  },
+  {
+    "productCode": "1291399",
+    "averagePrice": 79.90,
+    "minPrice": 69.90,
+    "maxPrice": 89.90
+  },
+  {
+    "productCode": "9999999-unknown",
+    "averagePrice": 199.00,
+    "minPrice": 179.00,
+    "maxPrice": 219.00
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "customerNumber": "C-100234",
+  "somethingTheEndpointAddedLater": "must be ignored",
+  "orders": [
+    {
+      "orderNumber": "SO-999001",
+      "orderDate": "2026-05-05",
+      "status": "OPEN",
+      "currency": "EUR",
+      "totalPrice": 42.00,
+      "salesOrganisation": "must be ignored",
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-99999",
+          "quantity": 1,
+          "price": 42.00,
+          "warehouse": "must be ignored"
+        }
+      ]
+    }
+  ]
+}

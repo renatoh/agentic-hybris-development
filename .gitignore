@@ -1,0 +1,27 @@
+# This repo tracks only the project's own code and Claude/agentic setup -
+# not the SAP-provided platform/modules, local config, logs, or DB data.
+# Ignore everything by default, then explicitly un-ignore what we track.
+
+/*
+!/bin/
+/bin/*
+!/bin/custom/
+!/.claude/
+!/CLAUDE.md
+!/requirements/
+!/.gitignore
+/.claude/*.lock
+
+# Build output / generated / local-machine files inside bin/custom
+**/classes/
+**/testclasses/
+**/gensrc/
+**/eclipsebin/
+**/target/
+**/platformhome.properties
+**/.settings/
+**/.classpath
+**/.project
+**/.DS_Store
+*.class
+*.log

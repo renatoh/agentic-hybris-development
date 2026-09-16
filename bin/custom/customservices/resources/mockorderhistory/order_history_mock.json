@@ -1,0 +1,221 @@
+{
+  "customerNumber": "C-100234",
+  "orders": [
+    {
+      "orderNumber": "SO-100001",
+      "orderDate": "2026-01-15",
+      "status": "COMPLETED",
+      "currency": "EUR",
+      "totalPrice": 169.56,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-10001",
+          "quantity": 3,
+          "price": 56.52
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100002",
+      "orderDate": "2026-01-26",
+      "status": "COMPLETED",
+      "currency": "EUR",
+      "totalPrice": 148.2,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-10002",
+          "quantity": 5,
+          "price": 26.51
+        },
+        {
+          "positionNumber": 2,
+          "productReference": "SKU-30450",
+          "quantity": 1,
+          "price": 15.65
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100003",
+      "orderDate": "2026-02-06",
+      "status": "COMPLETED",
+      "currency": "EUR",
+      "totalPrice": 913.91,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-20011",
+          "quantity": 5,
+          "price": 124.37
+        },
+        {
+          "positionNumber": 2,
+          "productReference": "SKU-45001",
+          "quantity": 2,
+          "price": 146.03
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100004",
+      "orderDate": "2026-02-17",
+      "status": "COMPLETED",
+      "currency": "EUR",
+      "totalPrice": 919.28,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-20011",
+          "quantity": 4,
+          "price": 121.95
+        },
+        {
+          "positionNumber": 2,
+          "productReference": "SKU-10001",
+          "quantity": 2,
+          "price": 142.64
+        },
+        {
+          "positionNumber": 3,
+          "productReference": "SKU-30045",
+          "quantity": 3,
+          "price": 39.53
+        },
+        {
+          "positionNumber": 4,
+          "productReference": "SKU-30045",
+          "quantity": 1,
+          "price": 27.61
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100005",
+      "orderDate": "2026-02-28",
+      "status": "COMPLETED",
+      "currency": "EUR",
+      "totalPrice": 374.1,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-30045",
+          "quantity": 3,
+          "price": 124.7
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100006",
+      "orderDate": "2026-03-11",
+      "status": "SHIPPED",
+      "currency": "EUR",
+      "totalPrice": 168.55,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-40012",
+          "quantity": 5,
+          "price": 33.71
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100007",
+      "orderDate": "2026-03-22",
+      "status": "CANCELLED",
+      "currency": "EUR",
+      "totalPrice": 995.65,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-10002",
+          "quantity": 5,
+          "price": 65.69
+        },
+        {
+          "positionNumber": 2,
+          "productReference": "SKU-50003",
+          "quantity": 3,
+          "price": 119.69
+        },
+        {
+          "positionNumber": 3,
+          "productReference": "SKU-10002",
+          "quantity": 1,
+          "price": 135.63
+        },
+        {
+          "positionNumber": 4,
+          "productReference": "SKU-20099",
+          "quantity": 1,
+          "price": 172.5
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100008",
+      "orderDate": "2026-04-02",
+      "status": "SHIPPED",
+      "currency": "EUR",
+      "totalPrice": 288.42,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-30450",
+          "quantity": 3,
+          "price": 96.14
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100009",
+      "orderDate": "2026-04-13",
+      "status": "IN_PROCESS",
+      "currency": "EUR",
+      "totalPrice": 1100.79,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-10023",
+          "quantity": 3,
+          "price": 77.49
+        },
+        {
+          "positionNumber": 2,
+          "productReference": "SKU-20099",
+          "quantity": 1,
+          "price": 125.72
+        },
+        {
+          "positionNumber": 3,
+          "productReference": "SKU-10023",
+          "quantity": 5,
+          "price": 148.52
+        }
+      ]
+    },
+    {
+      "orderNumber": "SO-100010",
+      "orderDate": "2026-04-24",
+      "status": "OPEN",
+      "currency": "EUR",
+      "totalPrice": 525.26,
+      "positions": [
+        {
+          "positionNumber": 1,
+          "productReference": "SKU-40012",
+          "quantity": 4,
+          "price": 61.28
+        },
+        {
+          "positionNumber": 2,
+          "productReference": "SKU-45001",
+          "quantity": 2,
+          "price": 140.07
+        }
+      ]
+    }
+  ]
+}

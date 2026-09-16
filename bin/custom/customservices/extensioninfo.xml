@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!--
+ Copyright (c) 2021 SAP SE or an SAP affiliate company. All rights reserved.
+-->
+<extensioninfo xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="extensioninfo.xsd">
+
+    <extension abstractclassprefix="Generated" classprefix="Customservices" jaloLogicFree="true" managername="CustomservicesManager" managersuperclass="de.hybris.platform.jalo.extension.Extension" name="customservices" usemaven="false">
+
+        <!--
+            NET-8938: the order history facade extends de.hybris.platform.commercefacades.order.impl.DefaultOrderFacade
+            and uses OrderHistoryData / PriceDataFactory, all of which live in commercefacades.
+            Declaring it here also guarantees that customservices is loaded *after* commercefacades, so that the
+            <alias name="customOrderFacade" alias="orderFacade"/> in customservices-spring.xml wins over the
+            platform alias defined in commercefacades-spring.xml.
+            commerceservices, core and the rest come in transitively.
+        -->
+        <requires-extension name="commercefacades"/>
+
+        <coremodule generated="true" manager="com.custom.jalo.CustomservicesManager" packageroot="com.custom"/>
+
+    </extension>
+
+</extensioninfo>
