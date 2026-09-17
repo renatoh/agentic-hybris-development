@@ -52,6 +52,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import javax.annotation.Resource;
@@ -161,7 +162,7 @@ public class CartPageController extends AbstractCartPageController
 	 */
 	protected void resumePendingSaveForLater()
 	{
-		final String pendingProductCode = (String) getSessionService().getAttribute(PENDING_SAVE_FOR_LATER_PRODUCT_CODE);
+		final String pendingProductCode = getSessionService().getAttribute(PENDING_SAVE_FOR_LATER_PRODUCT_CODE);
 		if (pendingProductCode != null)
 		{
 			getSessionService().removeAttribute(PENDING_SAVE_FOR_LATER_PRODUCT_CODE);
@@ -736,7 +737,10 @@ public class CartPageController extends AbstractCartPageController
 			getSavedForLaterFacade().saveCartEntryForLater(entryNumber);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater");
 		}
-		catch (final RuntimeException e)
+		// NoSuchElementException: entryNumber no longer matches a cart entry (stale page/tampered
+		// request). IllegalStateException: DefaultSavedForLaterFacade wraps a
+		// CommerceCartModificationException from the cart-entry-removal step in one of these.
+		catch (final NoSuchElementException | IllegalStateException e)
 		{
 			LOG.warn("Couldn't save cart entry " + entryNumber + " for later.", e);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.savedForLater");
@@ -758,7 +762,10 @@ public class CartPageController extends AbstractCartPageController
 			getSavedForLaterFacade().moveToCart(productCode);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.movedToCart");
 		}
-		catch (final CommerceCartModificationException | RuntimeException e)
+		// CommerceCartModificationException: the add-to-cart itself failed (e.g. now out of stock -
+		// acceptance criterion 5). NoSuchElementException: productCode no longer matches a saved
+		// entry (stale page/tampered request).
+		catch (final CommerceCartModificationException | NoSuchElementException e)
 		{
 			LOG.warn("Couldn't move saved-for-later product " + productCode + " to cart.", e);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.movedToCart");
@@ -779,7 +786,8 @@ public class CartPageController extends AbstractCartPageController
 			getSavedForLaterFacade().removeSavedItem(productCode);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.removedSavedForLater");
 		}
-		catch (final RuntimeException e)
+		// productCode no longer matches a saved entry (stale page/tampered request).
+		catch (final NoSuchElementException e)
 		{
 			LOG.warn("Couldn't remove saved-for-later product " + productCode + ".", e);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.removedSavedForLater");
