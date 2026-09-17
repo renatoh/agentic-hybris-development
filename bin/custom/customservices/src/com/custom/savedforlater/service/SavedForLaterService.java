@@ -3,10 +3,8 @@
  */
 package com.custom.savedforlater.service;
 
-import de.hybris.platform.commerceservices.order.CommerceCartModificationException;
 import de.hybris.platform.core.model.product.ProductModel;
 import de.hybris.platform.core.model.user.CustomerModel;
-import de.hybris.platform.store.BaseStoreModel;
 
 import java.util.List;
 
@@ -33,13 +31,13 @@ public interface SavedForLaterService
 	void saveForLater(CustomerModel customer, ProductModel product, long quantity);
 
 	/**
-	 * @param customer  the owning customer
-	 * @param baseStore filters the result to entries whose product's {@code catalogVersion} belongs
-	 *                  to one of this store's catalogs (NET-8941 section 5.3) - a query-time filter,
-	 *                  not part of the entry's stored identity
-	 * @return the customer's saved entries visible for that store
+	 * @param customer the owning customer
+	 * @return the customer's saved entries whose product resolves against the current session's own
+	 *         catalog (NET-8941 section 5.3) - store-scoping is left entirely to
+	 *         {@code ProductService.getProductForCode(String)}, which already resolves against the
+	 *         session's catalog, rather than an explicit {@code BaseStoreModel} parameter (PR review)
 	 */
-	List<SavedForLaterEntryModel> getSavedItems(CustomerModel customer, BaseStoreModel baseStore);
+	List<SavedForLaterEntryModel> getSavedItems(CustomerModel customer);
 
 	/**
 	 * Moves a saved entry back into the customer's cart via the platform's normal add-to-cart path
@@ -50,9 +48,12 @@ public interface SavedForLaterService
 	 *
 	 * @param customer the owning customer
 	 * @param entry    the saved entry to move back into the cart
-	 * @throws CommerceCartModificationException if the platform's add-to-cart call fails
+	 * @throws IllegalStateException if the platform's add-to-cart call fails - unchecked, since every
+	 *                                caller only ever needs to know "it failed" and show a generic
+	 *                                error, not the platform's own checked
+	 *                                {@code CommerceCartModificationException} type (PR review)
 	 */
-	void moveToCart(CustomerModel customer, SavedForLaterEntryModel entry) throws CommerceCartModificationException;
+	void moveToCart(CustomerModel customer, SavedForLaterEntryModel entry);
 
 	/**
 	 * Deletes a saved entry without touching the cart (NET-8941 acceptance criterion 6).

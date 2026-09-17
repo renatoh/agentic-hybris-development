@@ -208,6 +208,5 @@
 		<property name="cartService" ref="cartService"/>
 		<property name="productFacade" ref="productFacade"/>
 		<property name="userService" ref="userService"/>
-		<property name="baseStoreService" ref="baseStoreService"/>
 	</bean>
 </beans>

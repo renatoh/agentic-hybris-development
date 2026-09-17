@@ -13,7 +13,6 @@ import de.hybris.platform.core.model.product.ProductModel;
 import de.hybris.platform.core.model.user.CustomerModel;
 import de.hybris.platform.order.CartService;
 import de.hybris.platform.servicelayer.user.UserService;
-import de.hybris.platform.store.services.BaseStoreService;
 
 import java.util.Arrays;
 import java.util.List;
@@ -37,7 +36,6 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 	private CartService cartService;
 	private ProductFacade productFacade;
 	private UserService userService;
-	private BaseStoreService baseStoreService;
 
 	@Override
 	public void saveCartEntryForLater(final long entryNumber)
@@ -61,12 +59,12 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 	@Override
 	public List<SavedForLaterEntryData> getSavedForLaterEntries()
 	{
-		return getSavedForLaterService().getSavedItems(getCurrentCustomer(), getBaseStoreService().getCurrentBaseStore())
+		return getSavedForLaterService().getSavedItems(getCurrentCustomer())
 				.stream().map(this::toData).collect(Collectors.toList());
 	}
 
 	@Override
-	public void moveToCart(final String productCode) throws CommerceCartModificationException
+	public void moveToCart(final String productCode)
 	{
 		final SavedForLaterEntryModel entry = findSavedEntry(productCode);
 		getSavedForLaterService().moveToCart(getCurrentCustomer(), entry);
@@ -88,7 +86,7 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 
 	protected SavedForLaterEntryModel findSavedEntry(final String productCode)
 	{
-		return getSavedForLaterService().getSavedItems(getCurrentCustomer(), getBaseStoreService().getCurrentBaseStore())
+		return getSavedForLaterService().getSavedItems(getCurrentCustomer())
 				.stream().filter(entry -> productCode.equals(entry.getProduct().getCode())).findFirst()
 				.orElseThrow(() -> new NoSuchElementException("No saved-for-later entry for product " + productCode));
 	}
@@ -160,16 +158,5 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 	public void setUserService(final UserService userService)
 	{
 		this.userService = userService;
-	}
-
-	protected BaseStoreService getBaseStoreService()
-	{
-		return baseStoreService;
-	}
-
-	@Required
-	public void setBaseStoreService(final BaseStoreService baseStoreService)
-	{
-		this.baseStoreService = baseStoreService;
 	}
 }

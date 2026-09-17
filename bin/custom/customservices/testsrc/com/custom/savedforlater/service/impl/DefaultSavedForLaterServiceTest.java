@@ -14,8 +14,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import de.hybris.bootstrap.annotations.UnitTest;
-import de.hybris.platform.catalog.model.CatalogModel;
-import de.hybris.platform.catalog.model.CatalogVersionModel;
 import de.hybris.platform.commerceservices.order.CommerceCartModification;
 import de.hybris.platform.commerceservices.order.CommerceCartModificationException;
 import de.hybris.platform.commerceservices.order.CommerceCartModificationStatus;
@@ -25,8 +23,10 @@ import de.hybris.platform.core.model.order.CartModel;
 import de.hybris.platform.core.model.product.ProductModel;
 import de.hybris.platform.core.model.user.CustomerModel;
 import de.hybris.platform.order.CartService;
+import de.hybris.platform.product.ProductService;
+import de.hybris.platform.servicelayer.exceptions.AmbiguousIdentifierException;
+import de.hybris.platform.servicelayer.exceptions.UnknownIdentifierException;
 import de.hybris.platform.servicelayer.model.ModelService;
-import de.hybris.platform.store.BaseStoreModel;
 
 import java.util.List;
 
@@ -55,6 +55,8 @@ public class DefaultSavedForLaterServiceTest
 	@Mock
 	private CommerceCartService commerceCartService;
 	@Mock
+	private ProductService productService;
+	@Mock
 	private CustomerModel customer;
 
 	private DefaultSavedForLaterService savedForLaterService;
@@ -66,14 +68,13 @@ public class DefaultSavedForLaterServiceTest
 		savedForLaterService.setModelService(modelService);
 		savedForLaterService.setCartService(cartService);
 		savedForLaterService.setCommerceCartService(commerceCartService);
+		savedForLaterService.setProductService(productService);
 	}
 
-	private ProductModel product(final CatalogModel catalog)
+	private ProductModel product(final String code)
 	{
 		final ProductModel product = mock(ProductModel.class);
-		final CatalogVersionModel catalogVersion = mock(CatalogVersionModel.class);
-		given(catalogVersion.getCatalog()).willReturn(catalog);
-		given(product.getCatalogVersion()).willReturn(catalogVersion);
+		given(product.getCode()).willReturn(code);
 		return product;
 	}
 
@@ -89,7 +90,7 @@ public class DefaultSavedForLaterServiceTest
 	public void shouldCreateANewEntryWhenSavingAProductWithNoExistingEntry()
 	{
 		given(customer.getSavedForLaterEntries()).willReturn(List.of());
-		final ProductModel product = product(mock(CatalogModel.class));
+		final ProductModel product = product("P1");
 		final SavedForLaterEntryModel createdEntry = mock(SavedForLaterEntryModel.class);
 		given(modelService.create(SavedForLaterEntryModel.class)).willReturn(createdEntry);
 
@@ -104,7 +105,7 @@ public class DefaultSavedForLaterServiceTest
 	@Test
 	public void shouldIncrementTheExistingEntryRatherThanCreatingADuplicateWhenTheProductIsAlreadySaved()
 	{
-		final ProductModel product = product(mock(CatalogModel.class));
+		final ProductModel product = product("P1");
 		final SavedForLaterEntryModel existingEntry = entry(product, 2L);
 		given(customer.getSavedForLaterEntries()).willReturn(List.of(existingEntry));
 
@@ -116,30 +117,41 @@ public class DefaultSavedForLaterServiceTest
 	}
 
 	@Test
-	public void shouldOnlyReturnSavedEntriesWhoseProductCatalogBelongsToTheGivenStore()
+	public void shouldOnlyReturnSavedEntriesWhoseProductResolvesInTheCurrentSessionCatalog()
 	{
-		final CatalogModel storeCatalog = mock(CatalogModel.class);
-		final CatalogModel otherCatalog = mock(CatalogModel.class);
-		final SavedForLaterEntryModel entryInStore = entry(product(storeCatalog), 1L);
-		final SavedForLaterEntryModel entryNotInStore = entry(product(otherCatalog), 1L);
-		given(customer.getSavedForLaterEntries()).willReturn(List.of(entryInStore, entryNotInStore));
+		final ProductModel visibleProduct = product("P1");
+		final ProductModel notVisibleProduct = product("P2");
+		final SavedForLaterEntryModel visibleEntry = entry(visibleProduct, 1L);
+		final SavedForLaterEntryModel notVisibleEntry = entry(notVisibleProduct, 1L);
+		given(customer.getSavedForLaterEntries()).willReturn(List.of(visibleEntry, notVisibleEntry));
 
-		final BaseStoreModel baseStore = mock(BaseStoreModel.class);
-		given(baseStore.getCatalogs()).willReturn(List.of(storeCatalog));
+		given(productService.getProductForCode("P1")).willReturn(visibleProduct);
+		given(productService.getProductForCode("P2")).willThrow(new UnknownIdentifierException("not in this catalog"));
 
-		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer, baseStore);
+		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer);
 
-		assertEquals(List.of(entryInStore), result);
+		assertEquals(List.of(visibleEntry), result);
+	}
+
+	@Test
+	public void shouldTreatAnAmbiguousProductAsVisible()
+	{
+		final ProductModel product = product("P1");
+		final SavedForLaterEntryModel entry = entry(product, 1L);
+		given(customer.getSavedForLaterEntries()).willReturn(List.of(entry));
+		given(productService.getProductForCode("P1")).willThrow(new AmbiguousIdentifierException("more than one match"));
+
+		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer);
+
+		assertEquals(List.of(entry), result);
 	}
 
 	@Test
 	public void shouldReturnAnEmptyListWhenTheCustomerHasNoSavedEntries()
 	{
 		given(customer.getSavedForLaterEntries()).willReturn(null);
-		final BaseStoreModel baseStore = mock(BaseStoreModel.class);
-		given(baseStore.getCatalogs()).willReturn(List.of(mock(CatalogModel.class)));
 
-		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer, baseStore);
+		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer);
 
 		assertTrue(result.isEmpty());
 	}
@@ -171,17 +183,18 @@ public class DefaultSavedForLaterServiceTest
 		given(cartService.getSessionCart()).willReturn(mock(CartModel.class));
 		final ProductModel product = mock(ProductModel.class);
 		final SavedForLaterEntryModel entry = entry(product, 1L);
-		final CommerceCartModificationException failure = new CommerceCartModificationException("invalid quantity");
-		doThrow(failure).when(commerceCartService).addToCart(any(CommerceCartParameter.class));
+		doThrow(new CommerceCartModificationException("invalid quantity")).when(commerceCartService)
+				.addToCart(any(CommerceCartParameter.class));
 
 		try
 		{
 			savedForLaterService.moveToCart(customer, entry);
-			fail("expected CommerceCartModificationException to propagate");
+			fail("expected IllegalStateException to propagate");
 		}
-		catch (final CommerceCartModificationException expected)
+		catch (final IllegalStateException expected)
 		{
-			assertEquals(failure, expected);
+			// expected - the platform's checked CommerceCartModificationException is converted to
+			// unchecked, since every caller only ever needs to know "it failed" (PR review)
 		}
 
 		verify(modelService, never()).remove(entry);
@@ -202,9 +215,9 @@ public class DefaultSavedForLaterServiceTest
 		try
 		{
 			savedForLaterService.moveToCart(customer, entry);
-			fail("expected CommerceCartModificationException for a non-success status");
+			fail("expected IllegalStateException for a non-success status");
 		}
-		catch (final CommerceCartModificationException expected)
+		catch (final IllegalStateException expected)
 		{
 			// expected
 		}

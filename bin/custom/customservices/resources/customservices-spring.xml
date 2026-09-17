@@ -197,26 +197,14 @@
 		<property name="modelService" ref="modelService"/>
 		<property name="cartService" ref="cartService"/>
 		<property name="commerceCartService" ref="commerceCartService"/>
+		<property name="productService" ref="productService"/>
 	</bean>
 
 	<!--
-	   ====== Customer removal cascade (NET-8941 section 5.1a / section 8 item 3) ======
-
-	   The Customer2SavedForLaterEntryRelation has no partof="true" on its target element, so
-	   deleting a Customer only cleans up the relation link, not the SavedForLaterEntry rows
-	   themselves (verified against PartOfModelRegisterForRemoveInterceptor, the platform's only
-	   cascade-on-remove mechanism for a relation - it is driven specifically by that modifier).
-	   This interceptor does the cleanup explicitly instead.
+	   Customer removal cascade (NET-8941 section 5.1a / section 8 item 3) is now handled by
+	   partof="true" on Customer2SavedForLaterEntryRelation's target element (customservices-items.xml)
+	   instead of an explicit RemoveInterceptor (PR review) - the platform's own
+	   PartOfModelRegisterForRemoveInterceptor does the cascade automatically for that modifier.
 	-->
-	<bean id="savedForLaterEntryCustomerRemoveInterceptor"
-	      class="com.custom.savedforlater.interceptor.SavedForLaterEntryCustomerRemoveInterceptor">
-		<property name="modelService" ref="modelService"/>
-	</bean>
-
-	<bean id="savedForLaterEntryCustomerRemoveInterceptorMapping"
-	      class="de.hybris.platform.servicelayer.interceptor.impl.InterceptorMapping">
-		<property name="interceptor" ref="savedForLaterEntryCustomerRemoveInterceptor"/>
-		<property name="typeCode" value="Customer"/>
-	</bean>
 
 </beans>

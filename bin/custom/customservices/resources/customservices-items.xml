@@ -14,6 +14,13 @@
 		   explicit index (on the SavedForLaterEntry itemtype below) mirror the platform's own
 		   AbstractOrder2AbstractOrderEntry relation (core-items.xml) - hybris does not auto-index a
 		   relation-derived FK.
+
+		   partof="true" on the target element (PR review): a customer's saved entries must not
+		   outlive the customer, and this modifier is exactly what drives the platform's own
+		   cascade-on-remove mechanism (PartOfModelRegisterForRemoveInterceptor) - verified against
+		   AbstractOrder2AbstractOrderEntry, which carries the same modifier for the same reason.
+		   Removing a Customer now cascades deletion of their SavedForLaterEntry rows without a
+		   custom RemoveInterceptor.
 		-->
 		<relation code="Customer2SavedForLaterEntryRelation" localized="false">
 			<sourceElement type="Customer" qualifier="customer" cardinality="one">
@@ -21,7 +28,7 @@
 			</sourceElement>
 			<targetElement type="SavedForLaterEntry" qualifier="savedForLaterEntries" cardinality="many"
 			               collectiontype="list">
-				<modifiers read="true" write="false" search="true" optional="true"/>
+				<modifiers read="true" write="false" search="true" optional="true" partof="true"/>
 			</targetElement>
 		</relation>
 

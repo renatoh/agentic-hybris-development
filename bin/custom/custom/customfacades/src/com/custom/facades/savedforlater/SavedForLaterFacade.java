@@ -3,8 +3,6 @@
  */
 package com.custom.facades.savedforlater;
 
-import de.hybris.platform.commerceservices.order.CommerceCartModificationException;
-
 import java.util.List;
 
 import com.custom.facades.savedforlater.data.SavedForLaterEntryData;
@@ -29,8 +27,8 @@ public interface SavedForLaterFacade
 	void saveCartEntryForLater(long entryNumber);
 
 	/**
-	 * @return the current customer's saved-for-later entries, scoped to the current base store's
-	 *         catalogs (NET-8941 section 5.3 / acceptance criterion 8)
+	 * @return the current customer's saved-for-later entries whose product resolves in the current
+	 *         session's own catalog (NET-8941 section 5.3 / acceptance criterion 8)
 	 */
 	List<SavedForLaterEntryData> getSavedForLaterEntries();
 
@@ -42,9 +40,9 @@ public interface SavedForLaterFacade
 	 *
 	 * @param productCode identifies the saved entry (product code is unique per customer - "merge on
 	 *                     duplicate" guarantees at most one saved entry per product)
-	 * @throws CommerceCartModificationException if the add-to-cart call fails
+	 * @throws IllegalStateException if the add-to-cart call fails
 	 */
-	void moveToCart(String productCode) throws CommerceCartModificationException;
+	void moveToCart(String productCode);
 
 	/**
 	 * Deletes a saved entry without touching the cart (NET-8941 acceptance criterion 6).

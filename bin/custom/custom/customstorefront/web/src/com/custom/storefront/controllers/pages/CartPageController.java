@@ -169,7 +169,7 @@ public class CartPageController extends AbstractCartPageController
 			if (!getUserFacade().isAnonymousUser())
 			{
 				findCartEntryNumberForProduct(pendingProductCode)
-						.ifPresent(entryNumber -> getSavedForLaterFacade().saveCartEntryForLater(entryNumber));
+						.ifPresent(entryNumber -> savedForLaterFacade.saveCartEntryForLater(entryNumber));
 			}
 		}
 	}
@@ -389,7 +389,7 @@ public class CartPageController extends AbstractCartPageController
 		// saved items yet.
 		if (!getUserFacade().isAnonymousUser())
 		{
-			model.addAttribute("savedForLaterEntries", getSavedForLaterFacade().getSavedForLaterEntries());
+			model.addAttribute("savedForLaterEntries", savedForLaterFacade.getSavedForLaterEntries());
 		}
 
 		// Because DefaultSiteConfigService.getProperty() doesn't set default boolean value for undefined property,
@@ -655,16 +655,6 @@ public class CartPageController extends AbstractCartPageController
 		this.baseSiteService = baseSiteService;
 	}
 
-	protected SavedForLaterFacade getSavedForLaterFacade()
-	{
-		return savedForLaterFacade;
-	}
-
-	public void setSavedForLaterFacade(final SavedForLaterFacade savedForLaterFacade)
-	{
-		this.savedForLaterFacade = savedForLaterFacade;
-	}
-
 	@RequestMapping(value = "/entry/execute/" + ACTION_CODE_PATH_VARIABLE_PATTERN, method = RequestMethod.POST)
 	public String executeCartEntryAction(@PathVariable(value = "actionCode", required = true)
 	final String actionCode, final RedirectAttributes redirectModel, @RequestParam("entryNumbers")
@@ -734,7 +724,7 @@ public class CartPageController extends AbstractCartPageController
 
 		try
 		{
-			getSavedForLaterFacade().saveCartEntryForLater(entryNumber);
+			savedForLaterFacade.saveCartEntryForLater(entryNumber);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater");
 		}
 		// NoSuchElementException: entryNumber no longer matches a cart entry (stale page/tampered
@@ -759,13 +749,13 @@ public class CartPageController extends AbstractCartPageController
 	{
 		try
 		{
-			getSavedForLaterFacade().moveToCart(productCode);
+			savedForLaterFacade.moveToCart(productCode);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.movedToCart");
 		}
-		// CommerceCartModificationException: the add-to-cart itself failed (e.g. now out of stock -
-		// acceptance criterion 5). NoSuchElementException: productCode no longer matches a saved
-		// entry (stale page/tampered request).
-		catch (final CommerceCartModificationException | NoSuchElementException e)
+		// IllegalStateException: the add-to-cart itself failed (e.g. now out of stock - acceptance
+		// criterion 5). NoSuchElementException: productCode no longer matches a saved entry (stale
+		// page/tampered request).
+		catch (final IllegalStateException | NoSuchElementException e)
 		{
 			LOG.warn("Couldn't move saved-for-later product " + productCode + " to cart.", e);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.movedToCart");
@@ -783,7 +773,7 @@ public class CartPageController extends AbstractCartPageController
 	{
 		try
 		{
-			getSavedForLaterFacade().removeSavedItem(productCode);
+			savedForLaterFacade.removeSavedItem(productCode);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.removedSavedForLater");
 		}
 		// productCode no longer matches a saved entry (stale page/tampered request).
