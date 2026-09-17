@@ -57,6 +57,16 @@ public class DefaultSavedForLaterService implements SavedForLaterService
 			entry.setDateSaved(new Date());
 			getModelService().save(entry);
 		}
+
+		// findEntryForProduct (above) already read and cached customer.getSavedForLaterEntries() on
+		// this exact CustomerModel instance, before the new/updated entry was saved. Since the
+		// anonymous-shopper post-login flow calls saveForLater and then immediately re-reads
+		// getSavedItems(customer) within the very same request - typically the same cached
+        // CustomerModel instance, since UserService returns it - that stale, pre-save collection
+		// would otherwise still be served on this render, with the just-saved entry only showing up
+		// after a fresh request re-reads it from the DB. Refreshing here forces the next read to see
+		// the just-saved entry within this same request too.
+		getModelService().refresh(customer);
 	}
 
 	@Override

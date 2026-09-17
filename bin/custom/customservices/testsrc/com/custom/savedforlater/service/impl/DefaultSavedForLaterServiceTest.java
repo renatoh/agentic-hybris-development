@@ -100,6 +100,11 @@ public class DefaultSavedForLaterServiceTest
 		verify(createdEntry).setProduct(product);
 		verify(createdEntry).setQuantity(3L);
 		verify(modelService).save(createdEntry);
+		// customer.getSavedForLaterEntries() was already read (and cached on this exact instance)
+		// above by the merge-on-duplicate check, before the new entry was saved - without this
+		// refresh, a getSavedItems(customer) call later in the very same request (e.g. the
+		// anonymous-shopper post-login render) would still see the stale, pre-save collection.
+		verify(modelService).refresh(customer);
 	}
 
 	@Test
@@ -114,6 +119,7 @@ public class DefaultSavedForLaterServiceTest
 		verify(existingEntry).setQuantity(5L);
 		verify(modelService).save(existingEntry);
 		verify(modelService, never()).create(SavedForLaterEntryModel.class);
+		verify(modelService).refresh(customer);
 	}
 
 	@Test
