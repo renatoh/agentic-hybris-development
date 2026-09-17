@@ -195,4 +195,19 @@
 		<property name="productFacade" ref="productFacade"/>
 		<property name="classificationService" ref="classificationService"/>
 	</bean>
+
+	<!--
+	   ============================================================================================
+	   NET-8941 - Save-for-later facade (fronts savedForLaterService from customservices)
+	   ============================================================================================
+	-->
+	<alias alias="savedForLaterFacade" name="defaultSavedForLaterFacade"/>
+	<bean id="defaultSavedForLaterFacade" class="com.custom.facades.savedforlater.impl.DefaultSavedForLaterFacade">
+		<property name="savedForLaterService" ref="savedForLaterService"/>
+		<property name="cartFacade" ref="cartFacade"/>
+		<property name="cartService" ref="cartService"/>
+		<property name="productFacade" ref="productFacade"/>
+		<property name="userService" ref="userService"/>
+		<property name="baseStoreService" ref="baseStoreService"/>
+	</bean>
 </beans>

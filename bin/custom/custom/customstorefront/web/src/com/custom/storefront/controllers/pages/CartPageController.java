@@ -43,6 +43,7 @@ import de.hybris.platform.enumeration.EnumerationService;
 import de.hybris.platform.site.BaseSiteService;
 import de.hybris.platform.util.Config;
 import de.hybris.platform.util.Sanitizer;
+import com.custom.facades.savedforlater.SavedForLaterFacade;
 import com.custom.storefront.controllers.ControllerConstants;
 
 import java.io.IOException;
@@ -88,6 +89,15 @@ public class CartPageController extends AbstractCartPageController
 	public static final String SITE_QUOTES_ENABLED = "site.quotes.enabled.";
 	private static final String CART_CHECKOUT_ERROR = "cart.checkout.error";
 
+	/**
+	 * Session key holding the product code of a cart entry an anonymous shopper tried to save for
+	 * later, until they authenticate (NET-8941 section 5.4). Quantity is not stored here - it is
+	 * re-read from the still-present (now-merged) cart entry once logged in. Public: also read by
+	 * {@link com.custom.storefront.security.SaveForLaterAuthenticationSuccessHandler} to force the
+	 * post-login redirect back to /cart instead of the default target.
+	 */
+	public static final String PENDING_SAVE_FOR_LATER_PRODUCT_CODE = "pendingSaveForLaterProductCode";
+
 	private static final String ACTION_CODE_PATH_VARIABLE_PATTERN = "{actionCode:.*}";
 
 	private static final String REDIRECT_CART_URL = REDIRECT_PREFIX + "/cart";
@@ -126,6 +136,9 @@ public class CartPageController extends AbstractCartPageController
 	@Resource(name = "bruteForceAttackHandler")
 	private BruteForceAttackHandler bruteForceAttackHandler;
 
+	@Resource(name = "savedForLaterFacade")
+	private SavedForLaterFacade savedForLaterFacade;
+
 	@ModelAttribute("showCheckoutStrategies")
 	public boolean isCheckoutStrategyVisible()
 	{
@@ -135,7 +148,29 @@ public class CartPageController extends AbstractCartPageController
 	@RequestMapping(method = RequestMethod.GET)
 	public String showCart(final Model model) throws CMSItemNotFoundException
 	{
+		resumePendingSaveForLater();
 		return prepareCartUrl(model);
+	}
+
+	/**
+	 * If an anonymous "save for later" click stored a pending product code before redirecting to
+	 * login (see {@link #saveCartEntryForLater}) and the shopper is now authenticated, performs the
+	 * actual save against the now-merged cart entry and clears the pending flag - before the page
+	 * renders, so the saved-for-later section is already correct on this render (NET-8941 section
+	 * 5.4 step 3).
+	 */
+	protected void resumePendingSaveForLater()
+	{
+		final String pendingProductCode = (String) getSessionService().getAttribute(PENDING_SAVE_FOR_LATER_PRODUCT_CODE);
+		if (pendingProductCode != null)
+		{
+			getSessionService().removeAttribute(PENDING_SAVE_FOR_LATER_PRODUCT_CODE);
+			if (!getUserFacade().isAnonymousUser())
+			{
+				findCartEntryNumberForProduct(pendingProductCode)
+						.ifPresent(entryNumber -> getSavedForLaterFacade().saveCartEntryForLater(entryNumber));
+			}
+		}
 	}
 
 	protected String prepareCartUrl(final Model model) throws CMSItemNotFoundException
@@ -346,6 +381,14 @@ public class CartPageController extends AbstractCartPageController
 		if (!model.containsAttribute(VOUCHER_FORM))
 		{
 			model.addAttribute(VOUCHER_FORM, new VoucherForm());
+		}
+
+		// Saved-for-later section (NET-8941 section 3): cart page only, never the minicart. Requires
+		// a registered, logged-in customer (NET-8941 section 2) - an anonymous shopper simply has no
+		// saved items yet.
+		if (!getUserFacade().isAnonymousUser())
+		{
+			model.addAttribute("savedForLaterEntries", getSavedForLaterFacade().getSavedForLaterEntries());
 		}
 
 		// Because DefaultSiteConfigService.getProperty() doesn't set default boolean value for undefined property,
@@ -611,6 +654,16 @@ public class CartPageController extends AbstractCartPageController
 		this.baseSiteService = baseSiteService;
 	}
 
+	protected SavedForLaterFacade getSavedForLaterFacade()
+	{
+		return savedForLaterFacade;
+	}
+
+	public void setSavedForLaterFacade(final SavedForLaterFacade savedForLaterFacade)
+	{
+		this.savedForLaterFacade = savedForLaterFacade;
+	}
+
 	@RequestMapping(value = "/entry/execute/" + ACTION_CODE_PATH_VARIABLE_PATTERN, method = RequestMethod.POST)
 	public String executeCartEntryAction(@PathVariable(value = "actionCode", required = true)
 	final String actionCode, final RedirectAttributes redirectModel, @RequestParam("entryNumbers")
@@ -655,6 +708,97 @@ public class CartPageController extends AbstractCartPageController
 			}
 			return getCartPageRedirectUrl();
 		}
+	}
+
+	/**
+	 * "Save for later" action next to a cart entry's existing remove action (NET-8941 section 5.4),
+	 * visible to every shopper including anonymous ones. An anonymous shopper is redirected to
+	 * login without touching the cart yet - the product code is stashed in the session and the
+	 * actual save happens in {@link #resumePendingSaveForLater} once authenticated (acceptance
+	 * criterion 1a).
+	 */
+	@RequestMapping(value = "/entry/{entryNumber}/save-for-later", method = RequestMethod.POST)
+	public String saveEntryForLater(@PathVariable("entryNumber")
+	final long entryNumber, final RedirectAttributes redirectModel)
+	{
+		if (getUserFacade().isAnonymousUser())
+		{
+			final Optional<String> productCode = findProductCodeForEntry(entryNumber);
+			if (productCode.isPresent())
+			{
+				getSessionService().setAttribute(PENDING_SAVE_FOR_LATER_PRODUCT_CODE, productCode.get());
+			}
+			return REDIRECT_PREFIX + "/login";
+		}
+
+		try
+		{
+			getSavedForLaterFacade().saveCartEntryForLater(entryNumber);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater");
+		}
+		catch (final RuntimeException e)
+		{
+			LOG.warn("Couldn't save cart entry " + entryNumber + " for later.", e);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.savedForLater");
+		}
+		return REDIRECT_CART_URL;
+	}
+
+	/**
+	 * "Move to cart" action on a saved-for-later row (NET-8941 section 5.4). A failure (e.g. now out
+	 * of stock) leaves the item in the saved list and reports it the same way a normal add-to-cart
+	 * failure would (acceptance criterion 5).
+	 */
+	@RequestMapping(value = "/saved-for-later/{productCode}/move-to-cart", method = RequestMethod.POST)
+	public String moveSavedItemToCart(@PathVariable("productCode")
+	final String productCode, final RedirectAttributes redirectModel)
+	{
+		try
+		{
+			getSavedForLaterFacade().moveToCart(productCode);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.movedToCart");
+		}
+		catch (final CommerceCartModificationException | RuntimeException e)
+		{
+			LOG.warn("Couldn't move saved-for-later product " + productCode + " to cart.", e);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.movedToCart");
+		}
+		return REDIRECT_CART_URL;
+	}
+
+	/**
+	 * "Remove" action on a saved-for-later row - deletes the entry without touching the cart
+	 * (NET-8941 acceptance criterion 6).
+	 */
+	@RequestMapping(value = "/saved-for-later/{productCode}/remove", method = RequestMethod.POST)
+	public String removeSavedItem(@PathVariable("productCode")
+	final String productCode, final RedirectAttributes redirectModel)
+	{
+		try
+		{
+			getSavedForLaterFacade().removeSavedItem(productCode);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.removedSavedForLater");
+		}
+		catch (final RuntimeException e)
+		{
+			LOG.warn("Couldn't remove saved-for-later product " + productCode + ".", e);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.removedSavedForLater");
+		}
+		return REDIRECT_CART_URL;
+	}
+
+	protected Optional<String> findProductCodeForEntry(final long entryNumber)
+	{
+		return getCartFacade().getSessionCart().getEntries().stream()
+				.filter(entry -> entry.getEntryNumber().longValue() == entryNumber)
+				.map(entry -> entry.getProduct().getCode()).findFirst();
+	}
+
+	protected Optional<Long> findCartEntryNumberForProduct(final String productCode)
+	{
+		return getCartFacade().getSessionCart().getEntries().stream()
+				.filter(entry -> productCode.equals(entry.getProduct().getCode()))
+				.map(entry -> entry.getEntryNumber().longValue()).findFirst();
 	}
 
 	protected String getCartPageRedirectUrl()
