@@ -17,9 +17,35 @@ like before — read before overwriting, copy aside before a risky change, never
 bulk-delete without saying so first. Don't assume `git status`/`git diff` shows changes there; it
 won't, because those paths are gitignored, not because nothing changed.
 
-The repo currently has one remote (`origin`) that isn't reachable yet (an unresolved GitHub
-account-side permission issue, not a config problem) — don't attempt `git push` without checking
-current status first; ask the user rather than assuming it's fixed.
+`origin` is `github.com/renatoh/agentic-hybris-development` (public). `gh` is installed — `gh auth
+login` is a one-time, user-run step; once done, `gh pr create`/`gh pr view --comments`/etc. work
+without a token ever passing through an agent or this conversation.
+
+### Feature branches and PRs
+
+**Every ticket, and every sub-ticket spun off during one** (a review finding, a small addition like
+"also add a delete button"), gets its own feature branch — never commit feature work straight to
+`main`.
+
+- **Branch name**: `<agent-name>/<ticket-id>[-<short-slug>]` — e.g. `hybris-backend-developer/NET-8940`,
+  or for sub-ticket work with no formal ticket id, `hybris-backend-developer/NET-8940-delete-list`.
+  The agent name in the branch name is what makes a `git branch -a` / GitHub branch list tell you at
+  a glance which agent did the work, same purpose as the `Co-Authored-By: Claude ...` trailer on the
+  commit itself (keep including that too).
+- **`hybris-backend-developer` creates the branch, implements, and commits on it** — using the
+  private-identity env-var override on the commit (`GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/
+  `GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL`; never `git config`), same as the existing standing
+  practice.
+- **Only one agent switches branches at a time.** This is one shared working directory, not isolated
+  worktrees per agent — a branch switch changes what every other pane sees on disk. Follow the same
+  rule as the Herdr "never run two agents on the same files" rule above: `hybris-backend-reviewer`
+  and `hybris-junit-writer` work against whatever's currently checked out, so don't switch branches
+  while either is mid-task.
+- **`hybris-backend-developer` opens the PR itself once `hybris-backend-reviewer` is satisfied** —
+  not before, and not automatically the moment a review comes back clean; the developer pushes the
+  branch and runs `gh pr create --base main --head <branch>` after addressing every finding, per the
+  existing "before reporting work as done" checklist. `hybris-backend-reviewer` stays read-only —
+  it never pushes or opens the PR itself, only reports findings.
 
 ## Layout
 
@@ -152,7 +178,8 @@ the pane.
 7. **Beyond a one-line fix, has `hybris-backend-reviewer` actually reviewed it?** Not optional. A
    green build and passing tests prove it runs, not that it's right (real examples of the gap in
    the `sap-commerce-cloud` skill). Send it the changed paths per the Herdr rules above, and
-   address or consciously reject every finding before calling the work done.
+   address or consciously reject every finding before calling the work done. Once satisfied, open
+   the PR (see "Feature branches and PRs" above) — that's the actual last step, not a separate task.
 
 A green build is not proof that a page works. When a change affects the storefront, open the
 actual page and confirm it renders.

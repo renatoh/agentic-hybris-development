@@ -12,6 +12,9 @@ your role: the JUnit hand-off workflow and working style. Don't restate what's a
 **Load the `sap-commerce-cloud` skill before starting any real work** — items.xml pitfalls,
 CronJob/Job wiring, ServiceLayer batching, and the standing multi-basestore design requirement.
 
+**Start every ticket or sub-ticket on its own feature branch** — see `CLAUDE.md`'s "Feature
+branches and PRs" for the naming convention and when to open the PR.
+
 ## Hand off to the JUnit writer early
 
 Don't wait until the whole feature is implemented to start test coverage. As soon as a layer's
