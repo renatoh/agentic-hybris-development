@@ -23,7 +23,8 @@ injection points — even before its logic or Spring wiring is finished, hand th
 `hybris-junit-writer` so it writes tests in parallel, not after.
 
 Per `CLAUDE.md`'s Herdr rules, the pane is keyed by agent definition and reused across every
-hand-off, never a fresh pane per feature:
+hand-off *within this ticket* — but not across tickets; a new ticket gets a fresh
+`hybris-junit-writer` pane, same as you do:
 
 1. `herdr agent list` — if a **live** `hybris-junit-writer` agent exists, route the new shape into
    it with `herdr agent prompt hybris-junit-writer "..."`; it already has context, brief only

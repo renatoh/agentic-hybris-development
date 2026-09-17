@@ -145,11 +145,16 @@ as it happens.
 1. **Only start a pre-defined agent** — one of `hybris-backend-developer`, `hybris-junit-writer`,
    `hybris-backend-reviewer`. Never invent an ad-hoc persona/name (`net8939-backend`,
    `hybris-detail`). If none fits, ask the user rather than improvising a generic brief.
-2. **One pane per agent definition, reused across tasks** — keyed by *which agent*, not which
-   ticket. Run `herdr agent list` first: if a **live** agent of that definition exists, route the
-   new work into it (`herdr agent prompt <name> "..."`), briefed with just what's new. Otherwise
-   open one new pane and name the agent after the definition, never the task — an exited agent's
-   context is gone, so resuming is a cold start no different from starting fresh.
+2. **One pane per agent definition, reused across sub-tasks within a ticket — but a new ticket
+   starts a fresh pane.** Run `herdr agent list` first: if a **live** agent of that definition
+   exists *and is working the same ticket*, route the new work into it (`herdr agent prompt <name>
+   "..."`), briefed with just what's new. A **new ticket does not reuse the previous ticket's
+   context** — even if the pane is still live, rename its agent aside (e.g. append `-<ticket-id>`)
+   to free the canonical name, then start a fresh one for the new ticket. Don't let one pane's
+   context accumulate across unrelated tickets — it's wasted tokens for context the new ticket
+   doesn't need, and risks the same thing that happened once already: a pane's context grew large
+   enough across a long ticket that it hit its own session limit mid-task. An exited agent's context
+   is gone either way, so a fresh start costs nothing extra.
 3. **Open a pane**: `herdr pane split --current --direction right|down --cwd "$PWD" --no-focus`,
    then `herdr agent start <definition-name> --kind claude --pane <id>`. Wide pane → split right,
    narrow/tall → down. Keep the user's focus where it is.
