@@ -200,8 +200,17 @@
 		<property name="guidCookieStrategy" ref="guidCookieStrategy" />
 	</bean>
 
+	<!--
+	   NET-8941: swapped from the platform's plain StorefrontAuthenticationSuccessHandler to
+	   com.custom.storefront.security.SaveForLaterAuthenticationSuccessHandler (a thin subclass) so
+	   a pending anonymous "save for later" click lands back on /cart after login (acceptance
+	   criterion 1a) - see that class's own javadoc for why WebConstants.CONTINUE_URL and the
+	   RequestCache/SavedRequest replay do not already cover this. Only the /login (non-checkout)
+	   handler needs this - checkout login already targets /checkout by design.
+	-->
 	<alias name="defaultLoginAuthenticationSuccessHandler" alias="loginAuthenticationSuccessHandler"/>
-	<bean id="defaultLoginAuthenticationSuccessHandler" class="de.hybris.platform.acceleratorstorefrontcommons.security.StorefrontAuthenticationSuccessHandler" >
+	<bean id="defaultLoginAuthenticationSuccessHandler" class="com.custom.storefront.security.SaveForLaterAuthenticationSuccessHandler" >
+		<property name="sessionService" ref="sessionService" />
 		<property name="customerFacade" ref="customerFacade" />
 		<property name="defaultTargetUrl" value="#{'responsive' == '${commerceservices.default.desktop.ui.experience}' ? '/' : '/my-account'}"/>
 		<property name="useReferer" value="true"/>

@@ -180,4 +180,31 @@
 	   customfacades-spring.xml.
 	-->
 
+	<!--
+	   ============================================================================================
+	   NET-8941 - Save cart items for later
+	   ============================================================================================
+	-->
+
+	<!--
+	   ====== Service layer (NET-8941 section 5.2) ======
+
+	   commerceCartService is the platform's own de.hybris.platform.commerceservices.order bean -
+	   moving a saved entry back into the cart goes through it, so stock/price validation stays the
+	   platform's own code (NET-8941 section 2).
+	-->
+	<bean id="savedForLaterService" class="com.custom.savedforlater.service.impl.DefaultSavedForLaterService">
+		<property name="modelService" ref="modelService"/>
+		<property name="cartService" ref="cartService"/>
+		<property name="commerceCartService" ref="commerceCartService"/>
+		<property name="productService" ref="productService"/>
+	</bean>
+
+	<!--
+	   Customer removal cascade (NET-8941 section 5.1a / section 8 item 3) is now handled by
+	   partof="true" on Customer2SavedForLaterEntryRelation's target element (customservices-items.xml)
+	   instead of an explicit RemoveInterceptor (PR review) - the platform's own
+	   PartOfModelRegisterForRemoveInterceptor does the cascade automatically for that modifier.
+	-->
+
 </beans>
