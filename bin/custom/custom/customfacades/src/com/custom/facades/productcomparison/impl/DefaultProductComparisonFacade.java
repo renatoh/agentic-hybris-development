@@ -86,6 +86,12 @@ public class DefaultProductComparisonFacade implements ProductComparisonFacade
 	}
 
 	@Override
+	public void deleteList(final String listId)
+	{
+		getProductComparisonService().deleteList(listId);
+	}
+
+	@Override
 	public boolean hasLists()
 	{
 		return !getProductComparisonService().getLists().isEmpty();

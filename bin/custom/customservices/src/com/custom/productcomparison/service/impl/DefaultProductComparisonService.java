@@ -111,6 +111,19 @@ public class DefaultProductComparisonService implements ProductComparisonService
 		persistLists(lists);
 	}
 
+	@Override
+	public void deleteList(final String listId)
+	{
+		validateParameterNotNull(listId, "listId must not be null");
+
+		final List<ProductComparisonList> lists = getOrCreateLists();
+		final boolean removed = lists.removeIf(list -> list.getId().equals(listId));
+		if (removed)
+		{
+			persistLists(lists);
+		}
+	}
+
 	protected ProductComparisonList findList(final List<ProductComparisonList> lists, final CategoryModel groupingCategory)
 	{
 		return lists.stream().filter(list -> list.getGroupingCategory().getPk().equals(groupingCategory.getPk())).findFirst()

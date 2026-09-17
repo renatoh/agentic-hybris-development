@@ -82,4 +82,15 @@ public class AddToCompareController extends AbstractController
 		}
 		return REDIRECT_PREFIX + COMPARISON_PAGE_URL;
 	}
+
+	@PostMapping(value = "/compare/{listId}/delete")
+	public String deleteList(@PathVariable("listId") final String listId, final RedirectAttributes redirectAttrs)
+	{
+		productComparisonFacade.deleteList(listId);
+		GlobalMessages.addFlashMessage(redirectAttrs, GlobalMessages.CONF_MESSAGES_HOLDER, "product.compare.listDeleted");
+		// no listId query param - ProductComparisonFacade.getComparisonTable(null) already defaults
+		// to the most recently touched remaining list, or the empty state if none are left
+		// (acceptance criterion 8a)
+		return REDIRECT_PREFIX + COMPARISON_PAGE_URL;
+	}
 }

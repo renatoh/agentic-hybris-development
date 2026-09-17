@@ -63,6 +63,9 @@ never a hardcoded catalog id.
 - Comparison page: one list shown at a time (columns = products, rows = classification
   attributes for that list's L2 category, plus name/image/price), with a dropdown to switch lists.
 - Remove-from-list action on the comparison page; a list that drops to zero products disappears.
+- **Delete-entire-list action** on the comparison page — a single button that removes the whole
+  currently-displayed list in one step (not one product-remove click at a time). After deleting the
+  selected list, land on another remaining list if one exists, or the empty state if none do.
 
 **Out of scope (unless decided otherwise — see §8)**
 
@@ -107,6 +110,8 @@ single session attribute holding a list of comparison lists:
   creates a new list.
 - `getLists()` — all current lists for the session.
 - `removeProduct(listId, ProductModel)` — removes a product; deletes the list if it becomes empty.
+- `deleteList(listId)` — removes the entire list in one step, regardless of how many products it
+  holds.
 - No DB persistence, no new item type — this is pure session/service-layer state.
 
 ### 5.2 Grouping category resolution
@@ -118,13 +123,14 @@ A small helper (or a method on `ProductComparisonService`) that, given a `Produc
    full path from that category to the root.
 2. Reads the configured depth (`customservices.productcomparison.grouping.category.depth`, default
    `3`) via `ConfigurationService` — never a literal depth value in the resolution code.
-3. Returns the `CategoryModel` at that depth along the path (root = depth 1).
+3. Returns the `CategoryModel` at that depth along the path — or, if the path is shorter than the
+   configured depth, the deepest category actually on the path (i.e. the product's own directly-
+   assigned category) instead of nothing (see §8.4 for the precondition this relies on).
 
 Two products share a list only if this resolves to the **same** `CategoryModel` instance (by PK),
 not just the same name/code (matters once more than one catalog exists). Changing the depth
 property from `2` to `3` regroups by L3 with no code change — this is the acceptance test for
-"not hardcoded" (§6 AC12). A path shorter than the configured depth (a product filed only under a
-top-level category) has no grouping category at that depth; §8.4 covers what happens then.
+"not hardcoded" (§6 AC12).
 
 ### 5.3 Classification-based comparison rows
 
@@ -191,6 +197,9 @@ Implemented in the project's own cloned storefront extension (not `bin/modules`)
 7. A dropdown on the comparison page switches between all of the session's current lists.
 8. Removing a product from a list removes its column; removing the last product removes the list
    entirely (and the dropdown/icon reflect that).
+8a. A "delete list" button removes the entire currently-displayed list in one action, regardless of
+    how many products it holds; the page then shows another remaining list, or the empty state if
+    none are left (and the dropdown/icon badge reflect the removal).
 9. Nothing is persisted — a new session (or session invalidation) starts with zero lists.
 10. Category and classification lookups go through the session's own `CatalogVersionModel`, never
     a hardcoded catalog id (multi-store safe, see §2).
@@ -218,10 +227,18 @@ Implemented in the project's own cloned storefront extension (not `bin/modules`)
    lists.
 3. **Default list on landing on the comparison page** — most-recently-added-to list, unless you'd
    rather it be the first list, or require an explicit selection.
-4. **A product whose category path is shallower than the configured depth** (e.g. depth set to `3`
-   but a product is only filed under an L1/L2 path) — no grouping category resolves. Default
-   behaviour: skip adding it and show a message on the PDP ("not available for comparison"), unless
-   you'd rather it fall back to the deepest category actually available on its path.
+4. ~~A product whose category path is shallower than the configured depth~~ — **decided**: fall
+   back to the deepest category actually available on the product's path (in practice, its own
+   directly-assigned category) rather than excluding it from comparison. **This is only correct
+   under a catalog-authoring precondition**: products must be assigned to leaf categories only,
+   never to an internal category that also has its own subcategories. If that precondition holds,
+   the fallback is safe — a leaf never competes with a deeper sibling for the same grouping slot,
+   so two products can never be pushed into different lists despite sharing a real ancestor. If it's
+   ever violated (a product assigned directly to `Digital Cameras`, say, while other products go
+   deeper into `Digital Compacts`/`Digital SLR`), the fallback can silently split products that
+   should be grouped together — this is a data-quality risk to watch for, not a code bug to fix
+   defensively. No algorithm change needed beyond returning the deepest path element instead of
+   `Optional.empty()` when the path doesn't reach the configured depth — see §5.2.
 5. ~~Root-counting off-by-one~~ — **found and fixed**: manual testing showed a camera
    (`DSC-N1`, under `Cameras/Digital Cameras/Digital Compacts`) and an unrelated lens accessory
    (`NP03ZL`, under `Cameras/Digital Cameras/Digital SLR/Camera Lenses`) landing in the same

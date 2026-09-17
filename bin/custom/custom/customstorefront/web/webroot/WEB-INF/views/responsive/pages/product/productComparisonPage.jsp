@@ -39,6 +39,15 @@
 					<c:if test="${not empty comparisonTable}">
 						<h2 class="product-comparison-list-label">${fn:escapeXml(comparisonTable.label)}</h2>
 
+						<c:url value="/compare/${fn:escapeXml(comparisonTable.listId)}/delete" var="deleteListUrl"/>
+						<form action="${fn:escapeXml(deleteListUrl)}" method="post" class="product-comparison-delete-list-form">
+							<sec:csrfInput/>
+							<button type="submit" class="btn btn-danger product-comparison-delete-list-button js-product-comparison-delete-list"
+									data-confirm-message="<spring:theme code="product.compare.page.deleteList.confirm"/>">
+								<spring:theme code="product.compare.page.deleteList"/>
+							</button>
+						</form>
+
 						<div class="product-comparison-table-wrap">
 							<table class="product-comparison-table">
 								<thead>
@@ -81,6 +90,24 @@
 			</c:choose>
 
 		</div>
+
+		<script>
+			(function () {
+				// Bulk delete-list action needs its own confirmation, distinct from the per-product
+				// remove buttons - reads the message via getAttribute (already HTML-decoded by the
+				// browser) rather than inlining it into a JS string literal, so it is safe regardless
+				// of quotes/apostrophes in the translated text.
+				var deleteButtons = document.querySelectorAll('.js-product-comparison-delete-list');
+				for (var i = 0; i < deleteButtons.length; i++) {
+					deleteButtons[i].addEventListener('click', function (event) {
+						var message = this.getAttribute('data-confirm-message');
+						if (message && !window.confirm(message)) {
+							event.preventDefault();
+						}
+					});
+				}
+			})();
+		</script>
 
 	</jsp:body>
 

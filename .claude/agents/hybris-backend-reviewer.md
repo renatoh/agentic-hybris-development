@@ -35,9 +35,13 @@ B2B (`B2BOrderFacade`, approval workflows, organisation scoping) differs from B2
 ## Rules
 
 - **Review only. Do not edit files.** Report findings; do not fix them.
-- **There is no version control here** — no `git diff`, no `git log`, nothing to compare
-  against. Scope the review by path and by recency instead: ask for the paths under review,
-  or find them with `ls -lT` / `find ... -newer <reference-file>`. Never assume a diff exists.
+- **Version control is partial.** A git repo tracks `bin/custom`, `.claude`, `CLAUDE.md`, and
+  `requirements/` — for changes in that scope, use `git diff`/`git log` normally, it's the most
+  reliable way to see exactly what changed. Outside that scope (`bin/platform`, `bin/modules`,
+  `config/`, and anything else gitignored) there is still no diff and no history — scope by path and
+  recency instead: ask for the paths under review, or find them with `ls -lT` /
+  `find ... -newer <reference-file>`. Don't assume a diff exists for a path until you've checked
+  whether it's actually tracked.
 - Read the binding spec in `requirements/` when one covers the change, and review against it.
   A change that works but contradicts an agreed spec is a finding.
 - Rank findings most-severe first. Say plainly when you find nothing — do not manufacture
@@ -85,8 +89,10 @@ B2B (`B2BOrderFacade`, approval workflows, organisation scoping) differs from B2
   not, say so and ask whether it was actually built — don't assume "looks right" means "is valid".
 - **ImpEx** — new or changed types covered under `resources/impex/`, essential vs. project data
   correctly separated.
-- **Localization** — `localized:java.lang.String` handled for all configured languages; message
-  keys that a JSP renders directly must actually exist, or the page shows a raw key.
+- **Localization** — `localized:java.lang.String` handled for English (this project's only
+  supported language, per `CLAUDE.md` — flag any edits to other locale bundles as unnecessary
+  scope, not a missing-translation gap); message keys a JSP renders directly must actually exist,
+  or the page shows a raw key.
 - **Catalog-version awareness** — anything reading products, categories or CMS items must resolve
   the right catalog version. A lookup that works in dev because only one version exists is a finding.
 - **Session and restrictions** — `SessionService` used correctly for temporary session state;

@@ -3,14 +3,23 @@
 This directory is the platform root (`hybris/`) of a local SAP Commerce Cloud 2211.37
 playground installation.
 
-## ⚠️ No version control
+## ⚠️ Version control is partial
 
-**This directory is not a git repository.** There is no `.git`, no branches, no `git diff`,
-no way to undo. Every edit is immediate and unrecoverable.
+**A git repo now exists at this root** (`hybris/`), but it only tracks project code and the
+agentic setup — `bin/custom`, `.claude`, `CLAUDE.md`, `requirements/` (see `.gitignore`). Use
+`git diff`/`git log`/`git status` freely for anything inside that scope to see what actually
+changed. Committing still follows normal git-safety practice — only when the user asks, never
+unprompted.
 
-- Read a file before overwriting it.
-- Before a risky or wide-reaching change, copy the affected files aside first.
-- Never bulk-rewrite or bulk-delete without saying what you are about to do.
+**Everything else is still untracked and has no way to undo**: `bin/platform`, `bin/modules`,
+`config/`, `data/`, `log/`, and any other path outside the tracked scope above. Treat those exactly
+like before — read before overwriting, copy aside before a risky change, never bulk-rewrite or
+bulk-delete without saying so first. Don't assume `git status`/`git diff` shows changes there; it
+won't, because those paths are gitignored, not because nothing changed.
+
+The repo currently has one remote (`origin`) that isn't reachable yet (an unresolved GitHub
+account-side permission issue, not a config problem) — don't attempt `git push` without checking
+current status first; ask the user rather than assuming it's fixed.
 
 ## Layout
 
@@ -33,6 +42,11 @@ clone of the accelerator (`ant extgen -Dinput.template=...`). `yacceleratorcore`
 in favour of the `custom*` equivalents — treat the `custom*` stack as project code (safe to edit),
 not as `bin/modules`. `yb2bacceleratorstorefront` also exists under `bin/custom` but is commented
 out — do not assume it is in play. Current scope is B2C only.
+
+**Localization: English only.** Add/edit message keys in `base_en.properties` (or the extension's
+own `*-locales_en.properties`) only — do not touch the other locale bundles (`base_de.properties`,
+`base_fr.properties`, etc.) that ship with the accelerator template. They exist because the template
+includes them, not because this project supports those languages.
 
 **Design for multiple stores, even though only one is live today.** Never hardcode a catalog/store
 into a global property — scope store-specific values as data instead. Full detail in the
@@ -113,8 +127,10 @@ as it happens.
 3. **Open a pane**: `herdr pane split --current --direction right|down --cwd "$PWD" --no-focus`,
    then `herdr agent start <definition-name> --kind claude --pane <id>`. Wide pane → split right,
    narrow/tall → down. Keep the user's focus where it is.
-4. **Never run two agents on the same files** — no version control here, concurrent writers
-   clobber each other silently. If a *different* agent definition already owns that area, wait.
+4. **Never run two agents on the same files** — git doesn't prevent simultaneous edits, only shows
+   the damage after the fact; concurrent writers still clobber each other silently, worse still
+   outside the tracked `bin/custom`/`.claude` scope where there's no diff to recover from at all.
+   If a *different* agent definition already owns that area, wait.
 5. **Clean up only what you created** — stop servers/watchers before finishing; don't close panes,
    tabs or workspaces you didn't open.
 
@@ -127,7 +143,8 @@ the pane.
 1. Did an `items.xml` / `beans.xml` change need `ant clean all` plus a system update
    (`hac` → Platform → Update) or a type-system migration? Say so explicitly.
 2. Are new or changed types covered by ImpEx (essential vs. project data) under `resources/impex/`?
-3. Is anything localized (`localized:java.lang.String`) handled for all configured languages?
+3. Is anything localized (`localized:java.lang.String`) handled for English — and English only (see
+   Layout above)? Don't add or edit message keys in other locale bundles.
 4. Are transactions, `SessionService` / `SearchRestrictions` and catalog-version awareness
    handled where relevant?
 5. Are new services registered in Spring and covered by a test in `testsrc`?

@@ -25,8 +25,10 @@ public interface ProductComparisonService
 	 *
 	 * @param product the product to add
 	 * @return the list the product was added to (or already was in), or {@link Optional#empty()} if
-	 *         the product has no grouping category at the configured depth and could not be added
-	 *         (NET-8940 section 8.4)
+	 *         the product has no valid grouping category at all and could not be added - a category
+	 *         path shallower than the configured depth is not this case, since it falls back to the
+	 *         deepest available category and the product is still added successfully (NET-8940
+	 *         section 8.4)
 	 */
 	Optional<ProductComparisonList> addProduct(ProductModel product);
 
@@ -55,4 +57,12 @@ public interface ProductComparisonService
 	 * @param product the product to remove
 	 */
 	void removeProduct(String listId, ProductModel product);
+
+	/**
+	 * Removes the entire list in one step, regardless of how many products it holds (acceptance
+	 * criterion 8a). A {@code listId} that does not match any current list is a no-op.
+	 *
+	 * @param listId a {@link ProductComparisonList#getId()} value
+	 */
+	void deleteList(String listId);
 }

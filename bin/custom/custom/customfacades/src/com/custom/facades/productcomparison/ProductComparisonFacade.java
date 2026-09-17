@@ -31,6 +31,12 @@ public interface ProductComparisonFacade
 	void removeFromCompare(String listId, String productCode);
 
 	/**
+	 * Deletes the entire list in one step, regardless of how many products it holds (acceptance
+	 * criterion 8a).
+	 */
+	void deleteList(String listId);
+
+	/**
 	 * @return {@code true} if the session has at least one comparison list - drives whether the
 	 *         header icon is shown enabled (acceptance criterion 5)
 	 */
