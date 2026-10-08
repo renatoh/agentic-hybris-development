@@ -16,6 +16,9 @@
         -->
         <requires-extension name="commercefacades"/>
 
+        <!-- NET-8943: ServiceProductModel, ServicePriceCondition and Product.servicePriceCondition are generated from customcore-items.xml -->
+        <requires-extension name="customcore"/>
+
         <coremodule generated="true" manager="com.custom.jalo.CustomservicesManager" packageroot="com.custom"/>
 
     </extension>

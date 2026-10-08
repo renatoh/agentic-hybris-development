@@ -180,4 +180,36 @@
 	   customfacades-spring.xml.
 	-->
 
+	<!--
+	   ====================================================================================
+	   NET-8943 - Product services (warranty extension, installation) sold in the cart
+	   ====================================================================================
+	-->
+
+	<bean id="productServiceLookupService" class="com.custom.productservices.service.impl.DefaultProductServiceLookupService">
+		<property name="enumerationService" ref="enumerationService"/>
+		<property name="pdtCriteriaFactory" ref="PDTCriteriaFactory"/>
+		<property name="findPriceValueInfoStrategy" ref="findPriceValueInfoStrategyExecutable"/>
+		<property name="userService" ref="userService"/>
+		<property name="userNetCheckingStrategy" ref="userNetCheckingStrategy"/>
+		<property name="timeService" ref="timeService"/>
+	</bean>
+
+	<bean id="serviceEntryGroupService" class="com.custom.productservices.service.impl.DefaultServiceEntryGroupService"/>
+
+	<!--
+	   Supplies the base price of service entries (section 5.2). Added to the platform's findPriceHooks list the
+	   same way subscriptionservices adds its hook; neither findPriceStrategy nor DefaultSLFindPriceStrategy is replaced.
+	-->
+	<bean id="serviceFindPriceHook" class="com.custom.productservices.hook.ServiceFindPriceHook">
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+		<property name="productServiceLookupService" ref="productServiceLookupService"/>
+		<property name="pdtCriteriaFactory" ref="PDTCriteriaFactory"/>
+		<property name="findPriceValueInfoStrategy" ref="findPriceValueInfoStrategyExecutable"/>
+	</bean>
+
+	<bean id="serviceFindPriceHookMergeDirective" depends-on="findPriceHooks" parent="listMergeDirective">
+		<property name="add" ref="serviceFindPriceHook"/>
+	</bean>
+
 </beans>
