@@ -16,4 +16,10 @@ public final class CustomservicesConstants extends GeneratedCustomservicesConsta
 	}
 
 	// implement here constants used by this extension
+
+	/**
+	 * NET-8943: session attribute (a {@code List<String>} of service names) holding services that a cart calculation removed
+	 * because they were no longer valid. The cart page shows a message for them and clears the attribute.
+	 */
+	public static final String REMOVED_SERVICES_SESSION_ATTRIBUTE = "productServices.removedServiceNames";
 }

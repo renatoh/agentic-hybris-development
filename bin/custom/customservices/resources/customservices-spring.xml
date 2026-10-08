@@ -272,6 +272,7 @@
 	<bean id="serviceQuantitySyncCalculationHook" class="com.custom.productservices.cart.ServiceQuantitySyncCalculationHook">
 		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
 		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
+		<property name="sessionService" ref="sessionService"/>
 	</bean>
 	<bean id="serviceQuantitySyncCalculationHookMergeDirective" depends-on="commerceCartCalculationMethodHooks"
 	      parent="listMergeDirective">

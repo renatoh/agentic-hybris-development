@@ -527,3 +527,41 @@ Services never reserve or reduce stock.
     is inactive (§5.9).
 10. **Return or cancel of a service independently of its product**: not addressed. Order management
    behaviour stays as today. Raise it with the user if it comes up in testing.
+
+## 9. Implementation notes (as built)
+
+Recorded after implementation and review, so the spec matches the code. None of these change what the shopper sees.
+
+1. **Class and bean names that differ from the text above.** The project-data class is `ProductServicesSystemSetup`
+   (own bean `productServicesSystemSetup`), not `CustomservicesSystemSetup`. A `@SystemSetup` class without a Spring bean is
+   never instantiated: `CustomservicesSystemSetup` has none, so its NET-8939 / NET-8940 ImpEx has never been imported by a
+   system update. That is a separate, pre-existing defect and was left alone.
+2. **ImpEx location.** Classpath ImpEx must sit under `<ext>/resources/<ext>/...`. The sample data is
+   `customservices/resources/customservices/impex/customservices-productservices-sampledata.impex`.
+3. **Service products are hidden by a search restriction, not an add-to-cart validator.** `Frontend_ServiceProduct`
+   (`customergroup`, essential data in `customcore`) empties every storefront product lookup: no product page, quick view or
+   add-by-code. A validator was tried and removed because restoring a saved cart re-adds every entry through the add-to-cart
+   strategy and the validator broke it. `getAvailableServices` reads the product's references with search restrictions
+   disabled, since reading a relation also applies them. Only `APPROVED` services are offered.
+4. **Stale services are removed in more places than §5.4 lists.** The `beforeCalculate` hook removes an invalid service
+   entry before any calculation (restore, update, add, merge, checkout), because pricing it would throw. The names are kept
+   in a session attribute and the cart page shows the "no longer available" message once. Placing an order with a stale
+   service is refused (`InvalidCartException`) instead of dropping a line silently.
+5. **Quantity sync** also runs from a calculation hook and an add-to-cart hook, not only the update hook: merging a plain
+   add into an existing line goes through `CartService.updateQuantities`, which calls no update hook.
+6. **`addService` uses `CartService.addNewEntry`** (not the add-to-cart strategy), in the service's own unit, and undoes
+   itself if the recalculation fails. No add-to-cart hooks or max-order-quantity rules apply to a service.
+7. **Solr exclusion** is a rewrite of the `SolrIndexerQuery` text (adds `NOT IN ServiceProduct`), applied as essential data on
+   every update and again after sample data. It is not durable against a later re-import of a store's Solr ImpEx, and a
+   fresh `ant initialize` relies on the project step running after the store's project data. A durable version would put the
+   clause into each store's indexer query data.
+8. **Service prices are global.** Group rows have no product and no `catalogVersion` (the installation's other price rows
+   carry none either), and the group code is `<serviceCode>_<condition>`, so all stores sharing a currency share service
+   prices. Store-specific service prices need different service codes or user price groups.
+9. **Order DTOs.** Service entries are removed from `entries`, `unconsignedEntries`, consignment entries, delivery/pickup
+   groups; `SERVICE` root groups render as standalone lines. When a product line is split across several consignments each
+   consignment entry carries the whole line's services, and a consignment holding only services would be empty. Fulfilment
+   is not active in this installation, so that is unverified (§5.6 stays open).
+10. **Not in this installation:** the confirmation email lists no order lines at all (nothing to extend); Backoffice does not
+    start with the current database (a leftover `SavedForLaterEntry` type from another ticket), so the editor tab is
+    unverified; `custominitialdata`, `customfulfilmentprocess` and `order-process` are not active.

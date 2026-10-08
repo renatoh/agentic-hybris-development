@@ -3,7 +3,9 @@
  */
 package com.custom.productservices.cart;
 
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -15,8 +17,10 @@ import de.hybris.platform.core.model.order.AbstractOrderEntryModel;
 import de.hybris.platform.core.model.order.CartEntryModel;
 import de.hybris.platform.core.model.order.CartModel;
 import de.hybris.platform.core.model.product.ProductModel;
+import de.hybris.platform.servicelayer.session.SessionService;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -27,6 +31,7 @@ import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
+import com.custom.constants.CustomservicesConstants;
 import com.custom.core.model.ServiceProductModel;
 import com.custom.productservices.service.impl.DefaultServiceEntryGroupService;
 
@@ -43,6 +48,8 @@ public class ServiceQuantitySyncCalculationHookTest
 {
 	@Mock
 	private CartServiceSelectionService cartServiceSelectionService;
+	@Mock
+	private SessionService sessionService;
 
 	private ServiceQuantitySyncCalculationHook hook;
 	private CartModel cart;
@@ -54,6 +61,7 @@ public class ServiceQuantitySyncCalculationHookTest
 		hook = new ServiceQuantitySyncCalculationHook();
 		hook.setServiceEntryGroupService(new DefaultServiceEntryGroupService());
 		hook.setCartServiceSelectionService(cartServiceSelectionService);
+		hook.setSessionService(sessionService);
 
 		cart = new CartModel();
 		cart.setEntries(new ArrayList<>());
@@ -87,6 +95,67 @@ public class ServiceQuantitySyncCalculationHookTest
 		order.verify(cartServiceSelectionService).syncServiceQuantities(toaster);
 		verify(cartServiceSelectionService, never()).syncServiceQuantities(installation);
 		verifyNoMoreInteractions(cartServiceSelectionService);
+	}
+
+	// --- the shopper is told which services were removed -----------------------------------------------------------
+
+	private static ServiceProductModel serviceNamed(final String name)
+	{
+		// a mock only because the localized getName needs a session context
+		final ServiceProductModel service = mock(ServiceProductModel.class);
+		given(service.getName()).willReturn(name);
+		return service;
+	}
+
+	@Test
+	public void shouldRememberTheNamesOfRemovedServicesInTheSession()
+	{
+		entry(new ProductModel());
+		final List<ServiceProductModel> removed = Arrays.asList(serviceNamed("Installation"), serviceNamed("3-year warranty"));
+		given(cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart)).willReturn(removed);
+
+		hook.beforeCalculate(parameter);
+
+		verify(sessionService).setAttribute(CustomservicesConstants.REMOVED_SERVICES_SESSION_ATTRIBUTE,
+				Arrays.asList("Installation", "3-year warranty"));
+	}
+
+	@Test
+	public void shouldAppendToNamesAlreadyPendingInTheSession()
+	{
+		entry(new ProductModel());
+		given(sessionService.getAttribute(CustomservicesConstants.REMOVED_SERVICES_SESSION_ATTRIBUTE))
+				.willReturn(new ArrayList<>(Collections.singletonList("Installation")));
+		final ServiceProductModel warranty = serviceNamed("3-year warranty");
+		given(cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart))
+				.willReturn(Collections.singletonList(warranty));
+
+		hook.beforeCalculate(parameter);
+
+		verify(sessionService).setAttribute(CustomservicesConstants.REMOVED_SERVICES_SESSION_ATTRIBUTE,
+				Arrays.asList("Installation", "3-year warranty"));
+	}
+
+	@Test
+	public void shouldWriteNothingToTheSessionWhenNothingWasRemoved()
+	{
+		entry(new ProductModel());
+		given(cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart)).willReturn(Collections.emptyList());
+
+		hook.beforeCalculate(parameter);
+
+		verifyNoInteractions(sessionService);
+	}
+
+	@Test
+	public void shouldWriteNothingToTheSessionForANullResult()
+	{
+		entry(new ProductModel());
+		given(cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart)).willReturn(null);
+
+		hook.beforeCalculate(parameter);
+
+		verifyNoInteractions(sessionService);
 	}
 
 	@Test
@@ -128,7 +197,7 @@ public class ServiceQuantitySyncCalculationHookTest
 		hook.beforeCalculate(null);
 		hook.beforeCalculate(new CommerceCartParameter());
 
-		verifyNoInteractions(cartServiceSelectionService);
+		verifyNoInteractions(cartServiceSelectionService, sessionService);
 	}
 
 	@Test

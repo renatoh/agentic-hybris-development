@@ -81,8 +81,8 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 		catch (final RuntimeException e)
 		{
 			// "fails with no change": undo the new entry and group so the cart is not left half-written
-			LOG.warn("Adding service {} to cart {} failed, undoing: {}", serviceCode, cart.getCode(), e.getMessage());
-			undoAdd(cart, serviceEntry);
+			LOG.warn("Adding service {} to cart {} failed, undoing", serviceCode, cart.getCode(), e);
+			undoAdd(cart, serviceEntry, productEntry);
 			throw new CartServiceSelectionException("Service " + serviceCode + " could not be added: " + e.getMessage());
 		}
 	}
@@ -133,7 +133,7 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 				.anyMatch(e -> serviceEntryGroupService.isServiceEntry(e) && !isValid(e));
 	}
 
-	protected void undoAdd(final CartModel cart, final CartEntryModel serviceEntry)
+	protected void undoAdd(final CartModel cart, final CartEntryModel serviceEntry, final AbstractOrderEntryModel productEntry)
 	{
 		try
 		{
@@ -142,6 +142,8 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 				modelService.remove(serviceEntry);
 			}
 			modelService.refresh(cart);
+			// the product entry may still carry the new group number in memory
+			modelService.refresh(productEntry);
 			removeEmptyServiceGroups(cart);
 			normalizeEntryNumbers(cart);
 			recalculate(cart);
@@ -174,6 +176,8 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 		final List<ServiceProductModel> removed = invalid.stream().map(e -> (ServiceProductModel) e.getProduct())
 				.collect(Collectors.toList());
 		LOG.info("Removing {} invalid service entries from cart {}", invalid.size(), cart.getCode());
+		// persist whatever the caller changed on the cart (e.g. a restore sets the currency) before the reload below
+		modelService.save(cart);
 		modelService.removeAll(invalid);
 		modelService.refresh(cart);
 		removeEmptyServiceGroups(cart);

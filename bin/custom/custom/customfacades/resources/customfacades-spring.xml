@@ -220,6 +220,7 @@
 
 	<bean id="productServiceFacade" class="com.custom.facades.productservices.impl.DefaultProductServiceFacade">
 		<property name="cartService" ref="cartService"/>
+		<property name="sessionService" ref="sessionService"/>
 		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
 		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
 	</bean>

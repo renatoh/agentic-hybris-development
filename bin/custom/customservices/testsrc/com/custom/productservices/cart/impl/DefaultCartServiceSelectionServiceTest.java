@@ -17,6 +17,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -54,6 +55,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -344,6 +346,10 @@ public class DefaultCartServiceSelectionServiceTest
 		assertSame(installation, ((AbstractOrderEntryModel) removed.getValue()).getProduct());
 		assertCartIsBackTo(productEntry);
 		verify(commerceCartService, times(2)).calculateCart(any(CommerceCartParameter.class));
+		final InOrder undo = inOrder(modelService);
+		undo.verify(modelService).remove(removed.getValue());
+		undo.verify(modelService).refresh(cart);
+		undo.verify(modelService).refresh(productEntry);
 	}
 
 	@Test
@@ -638,6 +644,25 @@ public class DefaultCartServiceSelectionServiceTest
 		assertEquals(Integer.valueOf(1), warrantyEntry.getEntryNumber());
 		assertEquals(Collections.singleton(Integer.valueOf(1)), serviceGroupNumbers());
 		assertRecalculated();
+	}
+
+	@Test
+	public void shouldSaveTheCallersCartChangesBeforeRemovingAndReloading()
+	{
+		group(1, GroupType.SERVICE);
+		entry(0, dishwasher, 1L, 1);
+		final CartEntryModel installationEntry = entry(1, installation, 1L, 1);
+		entry(2, warranty, 1L, 1);
+		givenOffered(dishwasher, warranty);
+		givenPriced(warranty, dishwasher);
+		givenRemovalsAreReflectedInTheCart();
+
+		selectionService.removeInvalidServices(cart);
+
+		final InOrder order = inOrder(modelService);
+		order.verify(modelService).save(cart);
+		order.verify(modelService).removeAll(Collections.singletonList(installationEntry));
+		order.verify(modelService).refresh(cart);
 	}
 
 	@Test

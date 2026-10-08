@@ -4,6 +4,14 @@ import de.hybris.platform.commerceservices.order.hook.CommerceCartCalculationMet
 import de.hybris.platform.commerceservices.service.data.CommerceCartParameter;
 import de.hybris.platform.core.model.order.AbstractOrderEntryModel;
 import de.hybris.platform.core.model.order.CartModel;
+import de.hybris.platform.servicelayer.session.SessionService;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import com.custom.constants.CustomservicesConstants;
+import com.custom.core.model.ServiceProductModel;
 
 import com.custom.productservices.service.ServiceEntryGroupService;
 
@@ -17,6 +25,7 @@ public class ServiceQuantitySyncCalculationHook implements CommerceCartCalculati
 {
 	private ServiceEntryGroupService serviceEntryGroupService;
 	private CartServiceSelectionService cartServiceSelectionService;
+	private SessionService sessionService;
 
 	@Override
 	public void beforeCalculate(final CommerceCartParameter parameter)
@@ -27,7 +36,7 @@ public class ServiceQuantitySyncCalculationHook implements CommerceCartCalculati
 			return;
 		}
 		// an invalid service entry cannot be priced and would fail the calculation (restore, update, merge, checkout)
-		cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart);
+		rememberRemoved(cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart));
 		for (final AbstractOrderEntryModel entry : cart.getEntries())
 		{
 			if (!serviceEntryGroupService.isServiceEntry(entry))
@@ -35,6 +44,23 @@ public class ServiceQuantitySyncCalculationHook implements CommerceCartCalculati
 				cartServiceSelectionService.syncServiceQuantities(entry);
 			}
 		}
+	}
+
+	/** The shopper must be told: the cart page shows these names once and clears them. */
+	protected void rememberRemoved(final List<ServiceProductModel> removed)
+	{
+		if (removed == null || removed.isEmpty())
+		{
+			return;
+		}
+		final List<String> names = new ArrayList<>();
+		final List<String> pending = sessionService.getAttribute(CustomservicesConstants.REMOVED_SERVICES_SESSION_ATTRIBUTE);
+		if (pending != null)
+		{
+			names.addAll(pending);
+		}
+		names.addAll(removed.stream().map(ServiceProductModel::getName).collect(Collectors.toList()));
+		sessionService.setAttribute(CustomservicesConstants.REMOVED_SERVICES_SESSION_ATTRIBUTE, names);
 	}
 
 	@Override
@@ -46,6 +72,11 @@ public class ServiceQuantitySyncCalculationHook implements CommerceCartCalculati
 	public void setServiceEntryGroupService(final ServiceEntryGroupService serviceEntryGroupService)
 	{
 		this.serviceEntryGroupService = serviceEntryGroupService;
+	}
+
+	public void setSessionService(final SessionService sessionService)
+	{
+		this.sessionService = sessionService;
 	}
 
 	public void setCartServiceSelectionService(final CartServiceSelectionService cartServiceSelectionService)
