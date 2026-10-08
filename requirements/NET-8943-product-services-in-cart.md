@@ -48,6 +48,11 @@ Ruled out during design, recorded so they aren't revisited:
   lookup can't select by such a column, so the hook would have to reimplement Europe1's row ranking
   (customer price group, dates, minimum quantity, net/gross). Product price groups (§4.4) already
   express "a price for a class of products" and are matched by the platform.
+- **Option B**, one variant per service × condition (`SVC_INSTALLATION_LOW/_MEDIUM/_HIGH`), chosen
+  when the service is ticked. It would have kept price calculation free of custom code, but it
+  splits each service into several products. **The user chose option A**: one shared service product
+  per service, with the condition resolved at price-calculation time (§5.2). That accepts the
+  replaced platform price strategy described there.
 
 ## 1. Context
 
@@ -88,7 +93,11 @@ stays tied to it (§5.3, §5.7).
   `platformservices/resources/order-spring.xml` and called by `DefaultSLFindPriceStrategy`. SAP's
   own `subscriptionservices` (`SubscriptionPriceFindPriceHook`) and `sapproductconfigservices`
   (`DefaultProductConfigFindPriceHook`) use it. **Reused** (§5.2). It only selects the base price,
-  so discounts, promotions and taxes run after it unchanged.
+  so discounts, promotions and taxes run after it unchanged. **Limitation found during
+  implementation:** `DefaultSLFindPriceStrategy` runs its default lookup *before* the hooks, and that
+  lookup throws for a product with no matching row. SAP's own hook users never hit this, because
+  their products always have a default price. That's why §5.2 replaces the strategy with a small
+  subclass.
 - **Entry groups** (`AbstractOrderEntry.entryGroupNumbers`, `AbstractOrder.entryGroups`, dynamic
   `GroupType` enum): the platform's own way of tying cart entries together. **Reused** (§5.3).
 - **Configurable bundles** (`configurablebundleservices`, installed): checked and **not used**. They
@@ -255,8 +264,7 @@ before ticking always equals the price charged.
 
 Added to the platform's `findPriceHooks` list with a `listMergeDirective` in
 `customservices-spring.xml`, following `subscriptionservices-spring.xml`
-(`subscriptionPriceFindPriceHookMergeDirective`). Neither `findPriceStrategy` nor
-`DefaultSLFindPriceStrategy` is replaced.
+(`subscriptionPriceFindPriceHookMergeDirective`).
 
 - `isApplicable(entry)`: true only if `entry.product` is a `ServiceProduct`.
 - `findCustomBasePrice(entry, defaultPrice)`:
@@ -270,10 +278,38 @@ Added to the platform's `findPriceHooks` list with a `listMergeDirective` in
   5. If any step yields nothing (no linked entry, no condition, no group, no matching row), fail the
      calculation (§5.4 covers the cleanup). **Never** return `defaultPrice` for a service entry.
 
-**Verified in source:** `DefaultSLFindPriceStrategy.findBasePrice` (`platformservices`, line ~39)
-runs the default lookup first and returns `null` when nothing matches (line ~52), instead of
-throwing. It then hands that `null` to the first applicable hook. A service product with only group
-rows therefore reaches the hook safely, with `defaultPrice == null`.
+### 5.2a Hooks before the default lookup: `ServiceAwareSLFindPriceStrategy`
+
+**Verified on the live server during implementation (corrects an earlier wrong claim in this
+spec):** `DefaultSLFindPriceStrategy.findBasePrice` (`platformservices`, line ~39) runs the default
+lookup *first*. That lookup ends in `DefaultFindPriceValueInfoStrategy.getPDTValues` (line ~47),
+which **throws** `CalculationException: No price defined for product SVC_INSTALLATION, pg: null`
+when no row matches. The `null` branch at line ~52 is never reached, so the hook never runs.
+
+Fix: replace the platform's `slFindPriceStrategy` alias with a small subclass,
+`ServiceAwareSLFindPriceStrategy extends DefaultSLFindPriceStrategy` (`customservices`), declared
+with `parent="defaultSLFindPriceStrategy"` and taking over the alias in `customservices-spring.xml`.
+Standard hybris override style, about 15 lines:
+
+- `findBasePrice(entry)`: if any hook in `findPriceHooks` is applicable to the entry, call the first
+  applicable one with `defaultPrice = null` and return its result, **without** running the default
+  lookup. Otherwise, call `super.findBasePrice(entry)` unchanged.
+- No other method is overridden. Every non-service entry goes through the platform code exactly as
+  before.
+- This is the **only replaced platform price class** in this feature. Note it in the PR as an
+  upgrade-check item: on every SAP upgrade, re-check `DefaultSLFindPriceStrategy.findBasePrice`
+  against the subclass.
+- Hooks from other modules (subscriptions, product configurator) aren't active in this installation.
+  If one ever becomes applicable, it would now also run without a default price, so the subclass
+  must only skip the default lookup when the applicable hook is `ServiceFindPriceHook`. For any other
+  applicable hook, keep the platform's original order (default lookup first, then hook).
+
+Rejected alternatives, recorded so they aren't revisited:
+
+- A dummy fallback price row on each service product, so the default lookup succeeds. If the hook
+  ever weren't applied, a fake price would be charged.
+- A processor in front of the default lookup. Its criteria carry no cart entry, so it would need a
+  thread-local to find the linked product.
 
 **Discounts, promotions, taxes:** the service entry is a normal cart entry for the service product
 with a correct base price. Europe1 discount rows on the service product or its discount group,
@@ -283,14 +319,16 @@ to the dishwasher's own price.
 
 The implementer must verify:
 
-1. That `DefaultSLFindPriceStrategy` is actually the active price strategy in this installation,
-   behind `findPDTValuesInformationsSwitcher`, so the hook runs. `order-spring.xml` wires
-   `findPriceHooks` into two beans, at lines ~250 and ~273. Check both, and prove it with an
-   integration test that calculates a cart containing a service entry.
-2. That cart calculation tolerates a `null` base price from the default lookup when a hook supplies
-   the real one, end to end and not just inside `DefaultSLFindPriceStrategy`.
-3. That a group-only `PriceRow` (no product) doesn't leak into prices of normal products. It can't
-   match unless a product carries that group, and none does.
+1. ~~That `DefaultSLFindPriceStrategy` is the active price strategy~~: **verified** on the live
+   server (`FindPDTValuesInformationsSwitcher` → `DefaultSLFindPriceStrategy`). Still required: an
+   integration test that calculates a cart containing a service entry through the real calculation
+   service with `ServiceAwareSLFindPriceStrategy` in place. It must return the condition's price (for
+   example MEDIUM 120.00) and leave the product entry's price unchanged.
+2. That the `slFindPriceStrategy` alias really resolves to the subclass at runtime, and that both
+   beans wired with `findPriceHooks` in `order-spring.xml` (~250 and ~273) end up on the path that
+   prices cart entries.
+3. ~~Group-only rows leaking into normal products~~: **verified**. A normal product's price is
+   unaffected (86.86 × 2 = 173.72 with the service rows present).
 
 ### 5.3 Linking a service entry to its product entry (entry groups)
 
@@ -303,10 +341,13 @@ cart. The product entry and all of its service entries carry that group's number
   at a cart entry after the clone.
 - Within a `SERVICE` group, the single entry whose product is not a `ServiceProduct` is the product
   entry.
-- **Verify, don't assume**: that `entryGroups` and `entryGroupNumbers` are copied correctly to the
-  order. Also check how add-to-cart merging treats entries with `entryGroupNumbers`: adding the same
-  product again must merge into the existing product line, not create a second one. Report any
-  assumption here that proves wrong.
+- **Cart→order clone: verified.** `entryGroups` and `entryGroupNumbers` are preserved.
+- **Add-to-cart merge: verified as a problem, fix decided.** The platform's
+  `EntryMergeFilterEntryGroup` refuses to merge an existing product line in group {1} with a new add
+  that has no groups. Adding a second DW-500 would create a duplicate product line. Fix: override
+  that merge filter bean (`customservices`) so **`SERVICE`-type groups are ignored** when comparing.
+  Groups of any other type keep the platform behaviour. Service entries themselves are never merged
+  through add-to-cart. They are only created and changed by `CartServiceSelectionService` (§5.4).
 
 ### 5.4 Cart operations (`customservices`)
 
@@ -330,7 +371,9 @@ manipulation, so that recalculation and cart hooks run:
   always load. Nothing is charged at a stale or zero price.
 - **Cart merge on login**: product and service lines from an anonymous cart keep their linkage and
   quantities after merging. If the same product with the same service is in both carts, the merged
-  line ends up with one service entry at the merged quantity.
+  line ends up with one service entry at the merged quantity. Approach: merge the plain product
+  lines through the platform (with `SERVICE` groups ignored, §5.3), then re-attach the anonymous
+  cart's services through `addService`. Quantity sync then sets their quantity.
 
 ### 5.5 Stock
 
@@ -339,14 +382,15 @@ stock system enabled, `AbstractCommerceCartStrategy.getAvailableStockLevel` asks
 `commerceStockService` for a level. A null result means "force in stock", but a product with **no**
 `StockLevel` rows gets whatever `commerceStockLevelCalculationStrategy` computes for an empty list.
 
-The implementer verifies that result and picks one option, recording the choice in the PR:
+**Verified:** a service product with no `StockLevel` rows gets stock **0** (a normal product got
+99), so it would be blocked. The electronics store has **20 warehouses**.
 
-- **(a)** Data only: a `FORCEINSTOCK` `StockLevel` for each of the two service products in each of
-  the store's warehouses, in ImpEx. No code.
-- **(b)** Code: service products bypass the stock check in the add and update strategies.
-
-Prefer (a) if it's clean. Prefer (b) if every new warehouse would otherwise need remembering,
-because a forgotten stock row would silently block services.
+**Decided: code, not data.** A `commerceStockService` override (`customservices`, subclass of the
+platform's default, taking over its alias) returns "force in stock" (`null` level /
+`StockLevelStatus.INSTOCK`) for any `ServiceProduct` and delegates for everything else. No
+`StockLevel` rows exist for services. Per-warehouse `FORCEINSTOCK` rows (the rejected data option)
+would need maintaining for every new warehouse, and a forgotten row would silently block services.
+Services never reserve or reduce stock.
 
 ### 5.6 Order and fulfilment
 
@@ -394,8 +438,12 @@ because a forgotten stock row would silently block services.
 
 - Essential (`customcore`, from `CoreSystemSetup`, ESSENTIAL): anything type-level not created by
   items.xml alone, such as enum values if needed.
-- Sample (`custominitialdata`, from `InitialDataSystemSetup`, PROJECT): the electronics product
-  catalog, Staged, then Online in the same way existing electronics sample data reaches Online.
+- Sample (from `CustomservicesSystemSetup`, PROJECT): the electronics product catalog, Staged, then
+  Online through the catalog sync. **`custominitialdata` is not in `config/localextensions.xml` and
+  has no classes, so its `InitialDataSystemSetup` never runs** (verified). The sample data therefore
+  lives in `customservices`, next to the existing cronjob ImpEx registered there. It can move if
+  `custominitialdata` is activated later. The Staged→Online sync was verified to carry
+  `ServiceProduct`, `servicePriceCondition` and the `SERVICE` references without sync-job changes.
   - `SVC_INSTALLATION` and `SVC_WARRANTY_3Y`: English name and description, tax group, stock per
     §5.5, and **no** product price rows.
   - `ProductPriceGroup` values `SVC_INSTALLATION_{LOW,MEDIUM,HIGH}` and `SVC_WARRANTY_3Y_{LOW,MEDIUM,HIGH}`,
@@ -441,6 +489,11 @@ because a forgotten stock row would silently block services.
     product-specific row (documents the ranking), and a group-only row not affecting a normal
     product's price.
 15. `PriceRow` is neither subtyped nor extended. No new price-related type exists.
+16. The only replaced platform price class is `ServiceAwareSLFindPriceStrategy` (§5.2a). Every
+    non-service entry is priced through unchanged platform code, proven by a test where a cart
+    without services calculates exactly as before.
+17. Adding a product that's already in the cart with services attached increases that line's
+    quantity, and its services' quantities with it. It doesn't create a second product line.
 
 ## 7. Non-goals
 
@@ -460,12 +513,17 @@ because a forgotten stock row would silently block services.
 3. ~~Which services apply to which product~~: **decided**. Explicit `ProductReference` of type
    `SERVICE` (§4.3).
 4. ~~One condition per product vs. per service~~: **decided**. One per product, for now.
-5. **Stock handling for services** (§5.5): data vs. code. The implementer decides after verifying
-   and records the choice.
+5. ~~Stock handling for services~~: **decided**. A `commerceStockService` override, because of 20
+   warehouses (§5.5).
 6. **Consignment handling** (§5.6): verify with a real order; stop and report if fulfilment changes
    are needed.
-7. ~~Default price lookup on a service product~~: **verified in source**. It returns `null` when
-   nothing matches, and the hook then supplies the price (§5.2). End-to-end tolerance is still part
-   of verification 2.
-8. **Return or cancel of a service independently of its product**: not addressed. Order management
+7. ~~Default price lookup on a service product~~: **resolved**. It throws, not returns `null` (the
+   earlier claim here was wrong), so hooks never ran. **Decided: option A** with
+   `ServiceAwareSLFindPriceStrategy` (§5.2a). The variant-per-condition alternative (option B) was
+   rejected by the user (§0).
+8. ~~Add-to-cart merge with entry groups~~: **decided**. The `EntryMergeFilterEntryGroup` override
+   ignores `SERVICE` groups (§5.3).
+9. ~~Where sample data runs~~: **decided**. `CustomservicesSystemSetup`, because `custominitialdata`
+    is inactive (§5.9).
+10. **Return or cancel of a service independently of its product**: not addressed. Order management
    behaviour stays as today. Raise it with the user if it comes up in testing.
