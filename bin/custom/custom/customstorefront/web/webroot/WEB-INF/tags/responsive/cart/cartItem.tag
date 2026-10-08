@@ -289,6 +289,20 @@
                 </c:if>
             </div>
 
+            <%-- save for later (NET-8941): next to the existing remove action, visible to every
+                 shopper including anonymous ones - clicking it as an anonymous shopper forces a
+                 login and the save completes automatically afterward (acceptance criterion 1a) --%>
+            <div class="item__save-for-later">
+                <c:url value="/cart/entry/${entryNumberHtml}/save-for-later" var="saveForLaterUrl"/>
+                <form:form id="saveForLaterForm${entry.entryNumber}" action="${saveForLaterUrl}" method="post">
+                    <ycommerce:testId code="cart_product_saveForLater">
+                        <button type="submit" class="btn btn-link js-save-for-later">
+                            <spring:theme code="basket.page.entry.saveForLater"/>
+                        </button>
+                    </ycommerce:testId>
+                </form:form>
+            </div>
+
             <div class="item__quantity__total visible-xs visible-sm">
                 <c:if test="${entry.product.multidimensional}" >
                     <ycommerce:testId code="cart_product_updateQuantity">
