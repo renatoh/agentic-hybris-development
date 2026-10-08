@@ -195,4 +195,33 @@
 		<property name="productFacade" ref="productFacade"/>
 		<property name="classificationService" ref="classificationService"/>
 	</bean>
+
+	<!-- ====== NET-8943: services sold with products ====== -->
+
+	<bean id="productServiceOrderPopulator" class="com.custom.facades.productservices.populators.ProductServiceOrderPopulator">
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+		<property name="productServiceLookupService" ref="productServiceLookupService"/>
+		<property name="priceDataFactory" ref="priceDataFactory"/>
+	</bean>
+
+	<!-- Appended last so the platform has already built entries, groups and counts. -->
+	<bean parent="modifyPopulatorList">
+		<property name="list" ref="cartConverter"/>
+		<property name="add" ref="productServiceOrderPopulator"/>
+	</bean>
+	<bean parent="modifyPopulatorList">
+		<property name="list" ref="orderConverter"/>
+		<property name="add" ref="productServiceOrderPopulator"/>
+	</bean>
+	<bean parent="modifyPopulatorList">
+		<property name="list" ref="miniCartConverter"/>
+		<property name="add" ref="productServiceOrderPopulator"/>
+	</bean>
+
+	<bean id="productServiceFacade" class="com.custom.facades.productservices.impl.DefaultProductServiceFacade">
+		<property name="cartService" ref="cartService"/>
+		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+	</bean>
+
 </beans>

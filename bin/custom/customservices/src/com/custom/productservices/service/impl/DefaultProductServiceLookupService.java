@@ -11,6 +11,9 @@ import de.hybris.platform.order.strategies.calculation.pdt.criteria.PDTCriteriaF
 import de.hybris.platform.order.strategies.calculation.pdt.criteria.PriceValueInfoCriteria;
 import de.hybris.platform.product.BaseCriteria;
 import de.hybris.platform.servicelayer.exceptions.UnknownIdentifierException;
+import de.hybris.platform.search.restriction.SearchRestrictionService;
+import de.hybris.platform.servicelayer.session.SessionExecutionBody;
+import de.hybris.platform.servicelayer.session.SessionService;
 import de.hybris.platform.servicelayer.time.TimeService;
 import de.hybris.platform.servicelayer.type.TypeService;
 import de.hybris.platform.servicelayer.user.UserNetCheckingStrategy;
@@ -48,6 +51,8 @@ public class DefaultProductServiceLookupService implements ProductServiceLookupS
 	private UserService userService;
 	private UserNetCheckingStrategy userNetCheckingStrategy;
 	private TimeService timeService;
+	private SessionService sessionService;
+	private SearchRestrictionService searchRestrictionService;
 
 	@Override
 	public List<ServiceProductModel> getAvailableServices(final ProductModel product)
@@ -56,6 +61,23 @@ public class DefaultProductServiceLookupService implements ProductServiceLookupS
 		{
 			return Collections.emptyList();
 		}
+		// Service products are hidden from storefront searches (Frontend_ServiceProduct), and the platform's
+		// Frontend_ProductReference restriction hides references whose target is hidden. This is an internal read of the
+		// product's own references, so it runs without search restrictions.
+		return sessionService.executeInLocalView(new SessionExecutionBody()
+		{
+			@Override
+			public Object execute()
+			{
+				searchRestrictionService.disableSearchRestrictions();
+				return readServices(product);
+			}
+		});
+	}
+
+	@SuppressWarnings("unchecked")
+	private List<ServiceProductModel> readServices(final ProductModel product)
+	{
 		final Collection<ProductReferenceModel> references = product.getProductReferences();
 		if (references == null)
 		{
@@ -169,6 +191,16 @@ public class DefaultProductServiceLookupService implements ProductServiceLookupS
 	public void setUserNetCheckingStrategy(final UserNetCheckingStrategy userNetCheckingStrategy)
 	{
 		this.userNetCheckingStrategy = userNetCheckingStrategy;
+	}
+
+	public void setSessionService(final SessionService sessionService)
+	{
+		this.sessionService = sessionService;
+	}
+
+	public void setSearchRestrictionService(final SearchRestrictionService searchRestrictionService)
+	{
+		this.searchRestrictionService = searchRestrictionService;
 	}
 
 	public void setTimeService(final TimeService timeService)

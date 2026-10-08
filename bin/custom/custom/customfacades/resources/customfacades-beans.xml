@@ -12,4 +12,24 @@
 		<property name="code" type="String"/>
 		<property name="name" type="String"/>
 	</bean>
+
+	<!-- NET-8943: services (warranty extension, installation) sold with a product -->
+	<bean class="com.custom.facades.productservices.data.ProductServiceData">
+		<property name="code" type="String"/>
+		<property name="name" type="String"/>
+		<property name="description" type="String"/>
+		<property name="quantity" type="java.lang.Long"/>
+		<!-- price of one unit for this product; for a selected service the charged price -->
+		<property name="price" type="de.hybris.platform.commercefacades.product.data.PriceData"/>
+		<!-- price x quantity of the product line -->
+		<property name="totalPrice" type="de.hybris.platform.commercefacades.product.data.PriceData"/>
+		<property name="selected" type="boolean"/>
+	</bean>
+
+	<bean class="de.hybris.platform.commercefacades.order.data.OrderEntryData">
+		<!-- cart page only: every priced service offered for the line, selected or not -->
+		<property name="availableServices" type="java.util.List&lt;com.custom.facades.productservices.data.ProductServiceData>"/>
+		<!-- cart, checkout summary, order confirmation/history: the services bought with the line -->
+		<property name="selectedServices" type="java.util.List&lt;com.custom.facades.productservices.data.ProductServiceData>"/>
+	</bean>
 </beans>

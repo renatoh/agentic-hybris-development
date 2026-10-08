@@ -193,6 +193,8 @@
 		<property name="userService" ref="userService"/>
 		<property name="userNetCheckingStrategy" ref="userNetCheckingStrategy"/>
 		<property name="timeService" ref="timeService"/>
+		<property name="sessionService" ref="sessionService"/>
+		<property name="searchRestrictionService" ref="searchRestrictionService"/>
 	</bean>
 
 	<bean id="serviceEntryGroupService" class="com.custom.productservices.service.impl.DefaultServiceEntryGroupService"/>
@@ -211,5 +213,89 @@
 	<bean id="serviceFindPriceHookMergeDirective" depends-on="findPriceHooks" parent="listMergeDirective">
 		<property name="add" ref="serviceFindPriceHook"/>
 	</bean>
+
+	<!-- ====== Pricing: hooks before the default lookup (section 5.2a) ====== -->
+
+	<!--
+	   The only replaced platform price class in NET-8943. Re-check against DefaultSLFindPriceStrategy.findBasePrice
+	   on every SAP upgrade.
+	-->
+	<alias alias="slFindPriceStrategy" name="serviceAwareSLFindPriceStrategy"/>
+	<bean id="serviceAwareSLFindPriceStrategy" class="com.custom.productservices.pricing.ServiceAwareSLFindPriceStrategy"
+	      parent="defaultSLFindPriceStrategy"/>
+
+	<!-- ====== Cart operations (section 5.4) ====== -->
+
+	<bean id="cartServiceSelectionService" class="com.custom.productservices.cart.impl.DefaultCartServiceSelectionService">
+		<property name="productServiceLookupService" ref="productServiceLookupService"/>
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+		<property name="cartService" ref="cartService"/>
+		<property name="commerceCartService" ref="commerceCartService"/>
+		<property name="entryGroupService" ref="entryGroupService"/>
+		<property name="modelService" ref="modelService"/>
+	</bean>
+
+	<!-- Overrides the platform bean of the same id: SERVICE-type groups are ignored when merging cart entries (5.3) -->
+	<bean id="entryMergeFilterEntryGroup" class="com.custom.productservices.cart.ServiceAwareEntryMergeFilterEntryGroup"/>
+
+	<bean id="serviceProductAddToCartValidator" class="com.custom.productservices.cart.ServiceProductAddToCartValidator"/>
+	<bean id="serviceProductAddToCartValidatorMergeDirective" depends-on="addToCartValidators" parent="listMergeDirective">
+		<property name="add" ref="serviceProductAddToCartValidator"/>
+	</bean>
+
+	<bean id="serviceQuantitySyncUpdateCartEntryHook" class="com.custom.productservices.cart.ServiceQuantitySyncUpdateCartEntryHook">
+		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+		<property name="commerceCartService" ref="commerceCartService"/>
+		<property name="modelService" ref="modelService"/>
+	</bean>
+	<bean id="serviceQuantitySyncUpdateCartEntryHookMergeDirective" depends-on="commerceUpdateCartEntryMethodHooks"
+	      parent="listMergeDirective">
+		<property name="add" ref="serviceQuantitySyncUpdateCartEntryHook"/>
+	</bean>
+
+	<bean id="serviceQuantitySyncAddToCartMethodHookMergeDirective" depends-on="commerceAddToCartMethodHooks"
+	      parent="listMergeDirective">
+		<property name="add" ref="serviceQuantitySyncUpdateCartEntryHook"/>
+	</bean>
+
+	<bean id="serviceQuantitySyncCalculationHook" class="com.custom.productservices.cart.ServiceQuantitySyncCalculationHook">
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
+	</bean>
+	<bean id="serviceQuantitySyncCalculationHookMergeDirective" depends-on="commerceCartCalculationMethodHooks"
+	      parent="listMergeDirective">
+		<property name="add" ref="serviceQuantitySyncCalculationHook"/>
+	</bean>
+
+	<bean id="serviceCartMergingMethodHook" class="com.custom.productservices.cart.ServiceCartMergingMethodHook">
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
+		<property name="modelService" ref="modelService"/>
+	</bean>
+	<bean id="serviceCartMergingMethodHookMergeDirective" depends-on="commerceCartMergingMethodHooks" parent="listMergeDirective">
+		<property name="add" ref="serviceCartMergingMethodHook"/>
+	</bean>
+
+	<bean id="serviceEntryRemoveInterceptor" class="com.custom.productservices.interceptor.ServiceEntryRemoveInterceptor">
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
+	</bean>
+	<bean id="serviceEntryRemoveInterceptorMapping" class="de.hybris.platform.servicelayer.interceptor.impl.InterceptorMapping">
+		<property name="interceptor" ref="serviceEntryRemoveInterceptor"/>
+		<property name="typeCode" value="CartEntry"/>
+	</bean>
+
+	<!-- ====== Project data (section 5.9): needs its own bean, a @SystemSetup class without one never runs ====== -->
+
+	<bean id="productServicesSystemSetup" class="com.custom.setup.ProductServicesSystemSetup" parent="abstractCoreSystemSetup">
+		<property name="flexibleSearchService" ref="flexibleSearchService"/>
+		<property name="modelService" ref="modelService"/>
+	</bean>
+
+	<!-- ====== Stock (section 5.5): services are never blocked by stock ====== -->
+
+	<alias alias="commerceStockService" name="serviceAwareCommerceStockService"/>
+	<bean id="serviceAwareCommerceStockService" class="com.custom.productservices.cart.ServiceAwareCommerceStockService"
+	      parent="defaultCommerceStockService"/>
 
 </beans>

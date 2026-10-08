@@ -42,6 +42,8 @@ public class CoreSystemSetup extends AbstractSystemSetup
 		importImpexFile(context, "/customcore/import/common/themes.impex");
 		importImpexFile(context, "/customcore/import/common/user-groups.impex");
 		importImpexFile(context, "/customcore/import/common/cronjobs.impex");
+		// NET-8943: service products must not be reachable as standalone products
+		importImpexFile(context, "/customcore/import/common/service-products.impex");
 	}
 
 	/**

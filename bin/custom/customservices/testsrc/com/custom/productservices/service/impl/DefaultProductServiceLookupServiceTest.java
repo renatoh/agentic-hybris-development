@@ -9,7 +9,9 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willAnswer;
 import static org.mockito.BDDMockito.willThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -32,6 +34,9 @@ import de.hybris.platform.order.strategies.calculation.pdt.criteria.PriceValueIn
 import de.hybris.platform.order.strategies.calculation.pdt.criteria.impl.DefaultPriceValueInfoCriteria;
 import de.hybris.platform.product.BaseCriteria;
 import de.hybris.platform.servicelayer.exceptions.UnknownIdentifierException;
+import de.hybris.platform.search.restriction.SearchRestrictionService;
+import de.hybris.platform.servicelayer.session.SessionExecutionBody;
+import de.hybris.platform.servicelayer.session.SessionService;
 import de.hybris.platform.servicelayer.time.TimeService;
 import de.hybris.platform.servicelayer.user.UserNetCheckingStrategy;
 import de.hybris.platform.servicelayer.user.UserService;
@@ -46,6 +51,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -76,6 +82,10 @@ public class DefaultProductServiceLookupServiceTest
 	private UserNetCheckingStrategy userNetCheckingStrategy;
 	@Mock
 	private TimeService timeService;
+	@Mock
+	private SessionService sessionService;
+	@Mock
+	private SearchRestrictionService searchRestrictionService;
 
 	private DefaultProductServiceLookupService lookupService;
 
@@ -98,6 +108,8 @@ public class DefaultProductServiceLookupServiceTest
 		lookupService.setUserService(userService);
 		lookupService.setUserNetCheckingStrategy(userNetCheckingStrategy);
 		lookupService.setTimeService(timeService);
+		lookupService.setSessionService(sessionService);
+		lookupService.setSearchRestrictionService(searchRestrictionService);
 
 		dishwasher = new ProductModel();
 		dishwasher.setCode("DISHWASHER");
@@ -141,29 +153,86 @@ public class DefaultProductServiceLookupServiceTest
 
 	// --- getAvailableServices -------------------------------------------------------------------------------------
 
+	/**
+	 * Runs the body passed to executeInLocalView, and fails if search restrictions are disabled anywhere but inside
+	 * that body: disabling them in the caller's session would leak into the storefront request.
+	 */
+	private void givenLocalViewRunsTheBody()
+	{
+		final boolean[] inLocalView = { false };
+		given(sessionService.executeInLocalView(any(SessionExecutionBody.class))).willAnswer(inv -> {
+			inLocalView[0] = true;
+			try
+			{
+				return inv.<SessionExecutionBody> getArgument(0).execute();
+			}
+			finally
+			{
+				inLocalView[0] = false;
+			}
+		});
+		willAnswer(inv -> {
+			assertTrue("search restrictions may only be disabled inside the local view", inLocalView[0]);
+			return null;
+		}).given(searchRestrictionService).disableSearchRestrictions();
+	}
+
+	private void assertReadInLocalViewWithoutRestrictions()
+	{
+		final InOrder order = inOrder(sessionService, searchRestrictionService);
+		order.verify(sessionService).executeInLocalView(any(SessionExecutionBody.class));
+		order.verify(searchRestrictionService).disableSearchRestrictions();
+	}
+
 	@Test
 	public void shouldReturnTheActiveServiceReferenceTargetsInReferenceOrder()
 	{
+		givenLocalViewRunsTheBody();
 		dishwasher.setProductReferences(Arrays.asList( //
 				reference(warranty, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE), //
 				reference(installation, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE)));
 
 		assertEquals(Arrays.asList(warranty, installation), lookupService.getAvailableServices(dishwasher));
+		assertReadInLocalViewWithoutRestrictions();
 	}
 
 	@Test
-	public void shouldOfferNoServicesWhenTheProductHasNoCondition()
+	public void shouldReadTheReferencesOnlyInsideTheLocalView()
+	{
+		// a local view that does not run its body: nothing may be read or disabled outside it
+		dishwasher.setProductReferences(
+				Collections.singletonList(reference(installation, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE)));
+		given(sessionService.executeInLocalView(any(SessionExecutionBody.class))).willReturn(Collections.emptyList());
+
+		assertTrue(lookupService.getAvailableServices(dishwasher).isEmpty());
+		verifyNoInteractions(searchRestrictionService);
+	}
+
+	@Test
+	public void shouldOfferNoServicesWhenTheProductHasNoConditionWithoutOpeningALocalView()
 	{
 		dishwasher.setServicePriceCondition(null);
 		dishwasher.setProductReferences(
 				Collections.singletonList(reference(installation, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE)));
 
 		assertTrue(lookupService.getAvailableServices(dishwasher).isEmpty());
+		verifyNoInteractions(sessionService, searchRestrictionService);
+	}
+
+	@Test
+	public void shouldNotOpenALocalViewForANullProductOrAServiceProduct()
+	{
+		installation.setServicePriceCondition(ServicePriceCondition.LOW);
+
+		assertTrue(lookupService.getAvailableServices(null).isEmpty());
+		assertTrue(lookupService.getAvailableServices(installation).isEmpty());
+		verifyNoInteractions(sessionService, searchRestrictionService);
 	}
 
 	@Test
 	public void shouldSkipAnInactiveReference()
 	{
+		givenLocalViewRunsTheBody();
 		dishwasher.setProductReferences(Arrays.asList( //
 				reference(warranty, ProductReferenceTypeEnum.SERVICE, Boolean.FALSE), //
 				reference(warranty, ProductReferenceTypeEnum.SERVICE, null), //
@@ -175,6 +244,7 @@ public class DefaultProductServiceLookupServiceTest
 	@Test
 	public void shouldSkipAReferenceOfAnotherType()
 	{
+		givenLocalViewRunsTheBody();
 		dishwasher.setProductReferences(Arrays.asList( //
 				reference(warranty, ProductReferenceTypeEnum.ACCESSORIES, Boolean.TRUE), //
 				reference(warranty, ProductReferenceTypeEnum.SIMILAR, Boolean.TRUE), //
@@ -186,6 +256,7 @@ public class DefaultProductServiceLookupServiceTest
 	@Test
 	public void shouldSkipAServiceReferenceWhoseTargetIsNotAServiceProduct()
 	{
+		givenLocalViewRunsTheBody();
 		final ProductModel physical = new ProductModel();
 		physical.setCode("RINSE_AID");
 		dishwasher.setProductReferences(Arrays.asList( //
@@ -198,13 +269,12 @@ public class DefaultProductServiceLookupServiceTest
 	@Test
 	public void shouldReturnEmptyWhenTheProductHasNoReferences()
 	{
+		givenLocalViewRunsTheBody();
 		dishwasher.setProductReferences(null);
 		assertTrue(lookupService.getAvailableServices(dishwasher).isEmpty());
 
 		dishwasher.setProductReferences(Collections.emptyList());
 		assertTrue(lookupService.getAvailableServices(dishwasher).isEmpty());
-
-		assertTrue(lookupService.getAvailableServices(null).isEmpty());
 	}
 
 	// --- getServicePriceGroup -------------------------------------------------------------------------------------

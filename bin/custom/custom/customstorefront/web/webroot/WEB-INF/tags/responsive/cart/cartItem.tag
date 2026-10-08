@@ -10,6 +10,7 @@
 <%@ taglib prefix="grid" tagdir="/WEB-INF/tags/responsive/grid" %>
 <%@ taglib prefix="format" tagdir="/WEB-INF/tags/shared/format" %>
 <%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
+<%@ taglib prefix="cart" tagdir="/WEB-INF/tags/responsive/cart" %>
 <%@ taglib prefix="order" tagdir="/WEB-INF/tags/responsive/order" %>
 
 
@@ -375,6 +376,12 @@
                 </c:if>
             </div>
         </li>
+
+        <c:if test="${not empty entry.availableServices}">
+            <li class="item__list--services">
+                <cart:cartItemServices entry="${entry}"/>
+            </li>
+        </c:if>
 
         <li class="item__list--comment">
             <div class="item__comment quote__comments">
