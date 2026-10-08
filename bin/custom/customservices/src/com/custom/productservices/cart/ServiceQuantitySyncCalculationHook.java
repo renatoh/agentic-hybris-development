@@ -9,7 +9,7 @@ import com.custom.productservices.service.ServiceEntryGroupService;
 
 
 /**
- * NET-8943 &sect;5.4 quantity sync, last line of defence: merging a plain add into an existing product line goes through
+ * NET-8943 &sect;5.4 quantity sync and stale-service cleanup, last line of defence: merging a plain add into an existing product line goes through
  * {@code CartService.updateQuantities}, which calls no update hook. Every one of those paths calculates the cart
  * afterwards, so service quantities are aligned with their product line right before each calculation.
  */
@@ -26,6 +26,8 @@ public class ServiceQuantitySyncCalculationHook implements CommerceCartCalculati
 		{
 			return;
 		}
+		// an invalid service entry cannot be priced and would fail the calculation (restore, update, merge, checkout)
+		cartServiceSelectionService.removeInvalidServicesBeforeCalculation(cart);
 		for (final AbstractOrderEntryModel entry : cart.getEntries())
 		{
 			if (!serviceEntryGroupService.isServiceEntry(entry))

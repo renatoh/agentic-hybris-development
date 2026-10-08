@@ -1,5 +1,6 @@
 package com.custom.productservices.service.impl;
 
+import de.hybris.platform.catalog.enums.ArticleApprovalStatus;
 import de.hybris.platform.catalog.enums.ProductReferenceTypeEnum;
 import de.hybris.platform.catalog.model.ProductReferenceModel;
 import de.hybris.platform.core.model.product.ProductModel;
@@ -61,9 +62,9 @@ public class DefaultProductServiceLookupService implements ProductServiceLookupS
 		{
 			return Collections.emptyList();
 		}
-		// Service products are hidden from storefront searches (Frontend_ServiceProduct), and the platform's
-		// Frontend_ProductReference restriction hides references whose target is hidden. This is an internal read of the
-		// product's own references, so it runs without search restrictions.
+		// Service products are hidden from storefront searches (Frontend_ServiceProduct), and reading a product's
+		// references applies the search restrictions too, so references to hidden service products would disappear.
+		// This is an internal read of the product's own references, so it runs without search restrictions.
 		return sessionService.executeInLocalView(new SessionExecutionBody()
 		{
 			@Override
@@ -89,6 +90,7 @@ public class DefaultProductServiceLookupService implements ProductServiceLookupS
 				.map(ProductReferenceModel::getTarget) //
 				.filter(ServiceProductModel.class::isInstance) //
 				.map(ServiceProductModel.class::cast) //
+				.filter(service -> ArticleApprovalStatus.APPROVED.equals(service.getApprovalStatus())) //
 				.collect(Collectors.toList());
 	}
 

@@ -16,6 +16,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
 import de.hybris.bootstrap.annotations.UnitTest;
+import de.hybris.platform.catalog.enums.ArticleApprovalStatus;
 import de.hybris.platform.catalog.enums.ProductReferenceTypeEnum;
 import de.hybris.platform.catalog.model.ProductReferenceModel;
 import de.hybris.platform.core.model.c2l.CurrencyModel;
@@ -119,6 +120,8 @@ public class DefaultProductServiceLookupServiceTest
 		installation.setCode(INSTALLATION);
 		warranty = new ServiceProductModel();
 		warranty.setCode("SVC_WARRANTY_3Y");
+		installation.setApprovalStatus(ArticleApprovalStatus.APPROVED);
+		warranty.setApprovalStatus(ArticleApprovalStatus.APPROVED);
 	}
 
 	private ProductReferenceModel reference(final ProductModel target, final ProductReferenceTypeEnum type,
@@ -239,6 +242,30 @@ public class DefaultProductServiceLookupServiceTest
 				reference(installation, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE)));
 
 		assertEquals(Collections.singletonList(installation), lookupService.getAvailableServices(dishwasher));
+	}
+
+	@Test
+	public void shouldSkipAServiceThatIsNotApproved()
+	{
+		givenLocalViewRunsTheBody();
+		final ServiceProductModel unapproved = serviceWithStatus("SVC_UNAPPROVED", ArticleApprovalStatus.UNAPPROVED);
+		final ServiceProductModel inCheck = serviceWithStatus("SVC_CHECK", ArticleApprovalStatus.CHECK);
+		final ServiceProductModel noStatus = serviceWithStatus("SVC_NO_STATUS", null);
+		dishwasher.setProductReferences(Arrays.asList( //
+				reference(unapproved, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE), //
+				reference(installation, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE), //
+				reference(inCheck, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE), //
+				reference(noStatus, ProductReferenceTypeEnum.SERVICE, Boolean.TRUE)));
+
+		assertEquals(Collections.singletonList(installation), lookupService.getAvailableServices(dishwasher));
+	}
+
+	private static ServiceProductModel serviceWithStatus(final String code, final ArticleApprovalStatus status)
+	{
+		final ServiceProductModel service = new ServiceProductModel();
+		service.setCode(code);
+		service.setApprovalStatus(status);
+		return service;
 	}
 
 	@Test

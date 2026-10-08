@@ -48,6 +48,19 @@ public interface CartServiceSelectionService
 	List<ServiceProductModel> removeInvalidServices(CartModel cart);
 
 	/**
+	 * Same as {@link #removeInvalidServices(CartModel)} but without the recalculation. For calculation hooks: the cart is
+	 * about to be calculated anyway, and an invalid service entry would make that calculation fail.
+	 *
+	 * @return the removed services
+	 */
+	List<ServiceProductModel> removeInvalidServicesBeforeCalculation(CartModel cart);
+
+	/**
+	 * @return true if any service entry of the cart is not valid (see {@link #removeInvalidServices(CartModel)})
+	 */
+	boolean hasInvalidServices(CartModel cart);
+
+	/**
 	 * Removes {@code SERVICE} groups that have no service entries any more, and their numbers from remaining entries.
 	 */
 	void removeEmptyServiceGroups(CartModel cart);

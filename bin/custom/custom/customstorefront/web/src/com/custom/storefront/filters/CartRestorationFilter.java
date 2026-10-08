@@ -75,6 +75,12 @@ public class CartRestorationFilter extends OncePerRequestFilter
 				}
                 getSessionService().setAttribute(WebConstants.CART_RESTORATION, WebConstants.CART_RESTORATION_ERROR_STATUS);
             }
+            catch (final RuntimeException e)
+            {
+                // NET-8943: e.g. a repricing failure of a restored cart must never break the page the shopper asked for
+                LOG.warn("Cart restoration failed unexpectedly", e);
+                getSessionService().setAttribute(WebConstants.CART_RESTORATION, WebConstants.CART_RESTORATION_ERROR_STATUS);
+            }
         }
 	}
 
@@ -128,6 +134,13 @@ public class CartRestorationFilter extends OncePerRequestFilter
 				{
 					LOG.debug(e);
 				}
+                getSessionService().setAttribute(WebConstants.CART_RESTORATION_ERROR_STATUS,
+                        WebConstants.CART_RESTORATION_ERROR_STATUS);
+            }
+            catch (final RuntimeException e)
+            {
+                // NET-8943: see restoreCartWithNoCode
+                LOG.warn("Cart restoration failed unexpectedly", e);
                 getSessionService().setAttribute(WebConstants.CART_RESTORATION_ERROR_STATUS,
                         WebConstants.CART_RESTORATION_ERROR_STATUS);
             }

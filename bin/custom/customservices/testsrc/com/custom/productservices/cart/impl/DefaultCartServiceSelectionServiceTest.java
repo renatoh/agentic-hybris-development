@@ -15,8 +15,11 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willAnswer;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
@@ -33,6 +36,7 @@ import de.hybris.platform.core.order.EntryGroup;
 import de.hybris.platform.jalo.order.price.PriceInformation;
 import de.hybris.platform.order.CartService;
 import de.hybris.platform.order.EntryGroupService;
+import de.hybris.platform.servicelayer.exceptions.ModelSavingException;
 import de.hybris.platform.servicelayer.model.ModelService;
 import de.hybris.platform.util.PriceValue;
 
@@ -250,6 +254,110 @@ public class DefaultCartServiceSelectionServiceTest
 		assertEquals(Collections.singleton(Integer.valueOf(1)), services.get(0).getEntryGroupNumbers());
 		assertEquals("the product entry is not touched otherwise", Long.valueOf(2L), productEntry.getQuantity());
 		assertRecalculated();
+	}
+
+	@Test
+	public void shouldCreateTheServiceEntryInTheServicesOwnUnit() throws Exception
+	{
+		final UnitModel hours = new UnitModel();
+		installation.setUnit(hours);
+		entry(0, dishwasher, 2L);
+		givenOffered(dishwasher, installation);
+		givenPriced(installation, dishwasher);
+		given(entryGroupService.findMaxGroupNumber(anyList())).willReturn(Integer.valueOf(0));
+		givenAddNewEntryAppends();
+
+		selectionService.addService(cart, 0, INSTALLATION);
+
+		verify(cartService).addNewEntry(cart, installation, 2L, hours, -1, false);
+	}
+
+	// --- addService is atomic: a failure after the entry was created leaves no change behind ------------------------
+
+	/** Entries created by addNewEntry stay "new" until saveAll succeeds; refresh(cart) drops new and removed entries. */
+	private Set<Object> givenPersistenceIsSimulated()
+	{
+		final Set<Object> notPersisted = new HashSet<>();
+		given(cartService.addNewEntry(any(CartModel.class), any(ProductModel.class), anyLong(), any(UnitModel.class), anyInt(),
+				anyBoolean())).willAnswer(inv -> {
+					final int next = cart.getEntries().stream().mapToInt(e -> e.getEntryNumber().intValue()).max().orElse(-1) + 1;
+					final CartEntryModel created = entry(next, inv.getArgument(1), inv.<Long> getArgument(2).longValue());
+					notPersisted.add(created);
+					return created;
+				});
+		lenient().when(modelService.isNew(any())).thenAnswer(inv -> Boolean.valueOf(notPersisted.contains(inv.getArgument(0))));
+		lenient().doAnswer(inv -> {
+			cart.setEntries(cart.getEntries().stream().filter(e -> !notPersisted.contains(e)).collect(Collectors.toList()));
+			return null;
+		}).when(modelService).refresh(cart);
+		givenRemovalsAreReflectedInTheCart();
+		return notPersisted;
+	}
+
+	private void givenAProductLineOfferingInstallation()
+	{
+		givenOffered(dishwasher, installation);
+		givenPriced(installation, dishwasher);
+		given(entryGroupService.findMaxGroupNumber(anyList())).willReturn(Integer.valueOf(0));
+	}
+
+	private void assertCartIsBackTo(final CartEntryModel productEntry)
+	{
+		assertEquals(Collections.singletonList(productEntry), cart.getEntries());
+		assertTrue("the new SERVICE group is gone", serviceGroupNumbers().isEmpty());
+		assertTrue(productEntry.getEntryGroupNumbers().isEmpty());
+		assertEquals(Integer.valueOf(0), productEntry.getEntryNumber());
+	}
+
+	@Test
+	public void shouldUndoTheAddWhenSavingFails()
+	{
+		final CartEntryModel productEntry = entry(0, dishwasher, 2L);
+		givenAProductLineOfferingInstallation();
+		givenPersistenceIsSimulated();
+		willThrow(new ModelSavingException("save failed")).given(modelService).saveAll(any(), any(), any());
+
+		assertAddFails(0, INSTALLATION);
+
+		assertCartIsBackTo(productEntry);
+		verify(modelService, never()).remove(any(Object.class));
+		verify(commerceCartService).calculateCart(any(CommerceCartParameter.class));
+	}
+
+	@Test
+	public void shouldUndoTheAddWhenTheRecalculationFails()
+	{
+		final CartEntryModel productEntry = entry(0, dishwasher, 2L);
+		givenAProductLineOfferingInstallation();
+		final Set<Object> notPersisted = givenPersistenceIsSimulated();
+		willAnswer(inv -> {
+			notPersisted.removeAll(Arrays.asList(inv.getArguments()));
+			return null;
+		}).given(modelService).saveAll(any(), any(), any());
+		given(commerceCartService.calculateCart(any(CommerceCartParameter.class)))
+				.willThrow(new IllegalStateException("calculation failed")).willReturn(Boolean.TRUE);
+
+		assertAddFails(0, INSTALLATION);
+
+		final ArgumentCaptor<Object> removed = ArgumentCaptor.forClass(Object.class);
+		verify(modelService).remove(removed.capture());
+		assertSame(installation, ((AbstractOrderEntryModel) removed.getValue()).getProduct());
+		assertCartIsBackTo(productEntry);
+		verify(commerceCartService, times(2)).calculateCart(any(CommerceCartParameter.class));
+	}
+
+	@Test
+	public void shouldStillReportTheFailureWhenTheUndoFailsToo()
+	{
+		entry(0, dishwasher, 2L);
+		givenAProductLineOfferingInstallation();
+		givenAddNewEntryAppends();
+		given(modelService.isNew(any())).willReturn(Boolean.FALSE);
+		willThrow(new IllegalStateException("refresh failed")).given(modelService).refresh(cart);
+		willThrow(new IllegalStateException("remove failed")).given(modelService).remove(any(Object.class));
+
+		// a CartServiceSelectionException, not the RuntimeException of the failed undo
+		assertAddFails(0, INSTALLATION);
 	}
 
 	@Test
@@ -646,6 +754,80 @@ public class DefaultCartServiceSelectionServiceTest
 		assertTrue(fridgeEntry.getEntryGroupNumbers().isEmpty());
 		assertEquals(Arrays.asList(dishwasherEntry, fridgeEntry), cart.getEntries());
 		assertRecalculated();
+	}
+
+	// --- removeInvalidServicesBeforeCalculation / hasInvalidServices ------------------------------------------------
+
+	@Test
+	public void shouldRemoveInvalidServicesBeforeCalculationWithoutRecalculating()
+	{
+		group(1, GroupType.SERVICE);
+		final CartEntryModel productEntry = entry(0, dishwasher, 1L, 1);
+		entry(1, installation, 1L, 1);
+		final CartEntryModel warrantyEntry = entry(2, warranty, 1L, 1);
+		givenOffered(dishwasher, warranty);
+		givenPriced(warranty, dishwasher);
+		givenRemovalsAreReflectedInTheCart();
+
+		assertEquals(Collections.singletonList(installation), selectionService.removeInvalidServicesBeforeCalculation(cart));
+
+		assertEquals(Collections.singletonList(warrantyEntry), serviceEntriesOf(productEntry));
+		assertEquals(Integer.valueOf(1), warrantyEntry.getEntryNumber());
+		verifyNoInteractions(commerceCartService);
+	}
+
+	@Test
+	public void shouldRemoveNothingBeforeCalculationFromACleanCart()
+	{
+		group(1, GroupType.SERVICE);
+		entry(0, dishwasher, 1L, 1);
+		entry(1, installation, 1L, 1);
+		givenOffered(dishwasher, installation);
+		givenPriced(installation, dishwasher);
+
+		assertTrue(selectionService.removeInvalidServicesBeforeCalculation(cart).isEmpty());
+
+		assertEquals(2, cart.getEntries().size());
+		verifyNoInteractions(modelService, commerceCartService);
+	}
+
+	@Test
+	public void shouldReportAnInvalidServiceWithoutChangingTheCart()
+	{
+		group(1, GroupType.SERVICE);
+		entry(0, dishwasher, 1L, 1);
+		entry(1, installation, 1L, 1);
+		given(productServiceLookupService.getAvailableServices(dishwasher)).willReturn(Collections.emptyList());
+
+		assertTrue(selectionService.hasInvalidServices(cart));
+
+		assertEquals(2, cart.getEntries().size());
+		assertEquals(Collections.singleton(Integer.valueOf(1)), serviceGroupNumbers());
+		verifyNoInteractions(modelService, commerceCartService, cartService);
+	}
+
+	@Test
+	public void shouldReportAnOrphanServiceAsInvalid()
+	{
+		entry(0, installation, 1L);
+
+		assertTrue(selectionService.hasInvalidServices(cart));
+	}
+
+	@Test
+	public void shouldReportNoInvalidServicesForAValidOrServiceFreeCart()
+	{
+		group(1, GroupType.SERVICE);
+		entry(0, dishwasher, 1L, 1);
+		entry(1, installation, 1L, 1);
+		entry(2, fridge, 1L);
+		givenOffered(dishwasher, installation);
+		givenPriced(installation, dishwasher);
+
+		assertFalse(selectionService.hasInvalidServices(cart));
+
+		cart.setEntries(null);
+		assertFalse(selectionService.hasInvalidServices(cart));
 	}
 
 	@Test

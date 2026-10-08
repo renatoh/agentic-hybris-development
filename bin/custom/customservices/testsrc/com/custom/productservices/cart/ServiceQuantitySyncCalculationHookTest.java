@@ -3,6 +3,7 @@
  */
 package com.custom.productservices.cart;
 
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -22,6 +23,7 @@ import java.util.List;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
@@ -30,9 +32,10 @@ import com.custom.productservices.service.impl.DefaultServiceEntryGroupService;
 
 
 /**
- * NET-8943 &sect;5.4 quantity sync, AC4, AC17: before every commerce cart calculation, the services of each product
- * line are brought to that line's quantity, so no path that changes a product quantity can leave them out of sync.
- * Uses the real {@link DefaultServiceEntryGroupService} to tell service entries from product entries.
+ * NET-8943 &sect;5.4 quantity sync and stale-service cleanup, AC4, AC11, AC17: before every commerce cart calculation,
+ * invalid service entries are removed first (they cannot be priced and would fail the calculation) and then the
+ * services of each product line are brought to that line's quantity. Uses the real
+ * {@link DefaultServiceEntryGroupService} to tell service entries from product entries.
  */
 @UnitTest
 @RunWith(MockitoJUnitRunner.class)
@@ -70,7 +73,7 @@ public class ServiceQuantitySyncCalculationHookTest
 	}
 
 	@Test
-	public void shouldSyncEveryProductLineBeforeCalculating()
+	public void shouldRemoveInvalidServicesFirstAndThenSyncEveryProductLine()
 	{
 		final CartEntryModel dishwasher = entry(new ProductModel());
 		final CartEntryModel installation = entry(new ServiceProductModel());
@@ -78,31 +81,35 @@ public class ServiceQuantitySyncCalculationHookTest
 
 		hook.beforeCalculate(parameter);
 
-		verify(cartServiceSelectionService).syncServiceQuantities(dishwasher);
-		verify(cartServiceSelectionService).syncServiceQuantities(toaster);
+		final InOrder order = inOrder(cartServiceSelectionService);
+		order.verify(cartServiceSelectionService).removeInvalidServicesBeforeCalculation(cart);
+		order.verify(cartServiceSelectionService).syncServiceQuantities(dishwasher);
+		order.verify(cartServiceSelectionService).syncServiceQuantities(toaster);
 		verify(cartServiceSelectionService, never()).syncServiceQuantities(installation);
 		verifyNoMoreInteractions(cartServiceSelectionService);
 	}
 
 	@Test
-	public void shouldSkipACartWithOnlyServiceEntries()
+	public void shouldStillCleanUpACartWithOnlyServiceEntries()
 	{
 		entry(new ServiceProductModel());
 		entry(new ServiceProductModel());
 
 		hook.beforeCalculate(parameter);
 
-		verifyNoInteractions(cartServiceSelectionService);
+		verify(cartServiceSelectionService).removeInvalidServicesBeforeCalculation(cart);
+		verifyNoMoreInteractions(cartServiceSelectionService);
 	}
 
 	@Test
-	public void shouldDoNothingForAnEmptyCart()
+	public void shouldOnlyRunTheCleanupForAnEmptyCart()
 	{
 		cart.setEntries(Collections.emptyList());
 
 		hook.beforeCalculate(parameter);
 
-		verifyNoInteractions(cartServiceSelectionService);
+		verify(cartServiceSelectionService).removeInvalidServicesBeforeCalculation(cart);
+		verifyNoMoreInteractions(cartServiceSelectionService);
 	}
 
 	@Test

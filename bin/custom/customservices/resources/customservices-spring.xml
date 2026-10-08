@@ -201,7 +201,8 @@
 
 	<!--
 	   Supplies the base price of service entries (section 5.2). Added to the platform's findPriceHooks list the
-	   same way subscriptionservices adds its hook; neither findPriceStrategy nor DefaultSLFindPriceStrategy is replaced.
+	   same way subscriptionservices adds its hook. The default lookup would run first and throw for a service product,
+	   which is why slFindPriceStrategy is taken over below (section 5.2a).
 	-->
 	<bean id="serviceFindPriceHook" class="com.custom.productservices.hook.ServiceFindPriceHook">
 		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
@@ -217,8 +218,8 @@
 	<!-- ====== Pricing: hooks before the default lookup (section 5.2a) ====== -->
 
 	<!--
-	   The only replaced platform price class in NET-8943. Re-check against DefaultSLFindPriceStrategy.findBasePrice
-	   on every SAP upgrade.
+	   The only replaced platform price class in NET-8943 (section 5.2a). Re-check against
+	   DefaultSLFindPriceStrategy.findBasePrice on every SAP upgrade.
 	-->
 	<alias alias="slFindPriceStrategy" name="serviceAwareSLFindPriceStrategy"/>
 	<bean id="serviceAwareSLFindPriceStrategy" class="com.custom.productservices.pricing.ServiceAwareSLFindPriceStrategy"
@@ -238,9 +239,18 @@
 	<!-- Overrides the platform bean of the same id: SERVICE-type groups are ignored when merging cart entries (5.3) -->
 	<bean id="entryMergeFilterEntryGroup" class="com.custom.productservices.cart.ServiceAwareEntryMergeFilterEntryGroup"/>
 
-	<bean id="serviceProductAddToCartValidator" class="com.custom.productservices.cart.ServiceProductAddToCartValidator"/>
-	<bean id="serviceProductAddToCartValidatorMergeDirective" depends-on="addToCartValidators" parent="listMergeDirective">
-		<property name="add" ref="serviceProductAddToCartValidator"/>
+	<!--
+	   No add-to-cart validator for service products: storefront users cannot look a service product up by code at all
+	   (Frontend_ServiceProduct search restriction), and a validator would also break restoring a saved cart that holds
+	   services - the restore re-adds every entry through the add-to-cart strategy.
+	-->
+
+	<bean id="serviceValidationPlaceOrderMethodHook" class="com.custom.productservices.cart.ServiceValidationPlaceOrderMethodHook">
+		<property name="cartServiceSelectionService" ref="cartServiceSelectionService"/>
+	</bean>
+	<bean id="serviceValidationPlaceOrderMethodHookMergeDirective" depends-on="commercePlaceOrderMethodHooks"
+	      parent="listMergeDirective">
+		<property name="add" ref="serviceValidationPlaceOrderMethodHook"/>
 	</bean>
 
 	<bean id="serviceQuantitySyncUpdateCartEntryHook" class="com.custom.productservices.cart.ServiceQuantitySyncUpdateCartEntryHook">

@@ -68,12 +68,23 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 		}
 
 		final int groupNumber = ensureServiceGroup(cart, productEntry);
+		// the service is priced in its own unit, which is also the unit the displayed price uses
 		final CartEntryModel serviceEntry = cartService.addNewEntry(cart, service, productEntry.getQuantity().longValue(),
-				productEntry.getUnit(), -1, false);
+				service.getUnit() != null ? service.getUnit() : productEntry.getUnit(), -1, false);
 		serviceEntry.setEntryGroupNumbers(Collections.singleton(Integer.valueOf(groupNumber)));
-		modelService.saveAll(serviceEntry, productEntry, cart);
-		modelService.refresh(cart);
-		recalculate(cart);
+		try
+		{
+			modelService.saveAll(serviceEntry, productEntry, cart);
+			modelService.refresh(cart);
+			recalculate(cart);
+		}
+		catch (final RuntimeException e)
+		{
+			// "fails with no change": undo the new entry and group so the cart is not left half-written
+			LOG.warn("Adding service {} to cart {} failed, undoing: {}", serviceCode, cart.getCode(), e.getMessage());
+			undoAdd(cart, serviceEntry);
+			throw new CartServiceSelectionException("Service " + serviceCode + " could not be added: " + e.getMessage());
+		}
 	}
 
 	@Override
@@ -106,6 +117,43 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 	@Override
 	public List<ServiceProductModel> removeInvalidServices(final CartModel cart)
 	{
+		return removeInvalid(cart, true);
+	}
+
+	@Override
+	public List<ServiceProductModel> removeInvalidServicesBeforeCalculation(final CartModel cart)
+	{
+		return removeInvalid(cart, false);
+	}
+
+	@Override
+	public boolean hasInvalidServices(final CartModel cart)
+	{
+		return cart.getEntries() != null && cart.getEntries().stream()
+				.anyMatch(e -> serviceEntryGroupService.isServiceEntry(e) && !isValid(e));
+	}
+
+	protected void undoAdd(final CartModel cart, final CartEntryModel serviceEntry)
+	{
+		try
+		{
+			if (!modelService.isNew(serviceEntry))
+			{
+				modelService.remove(serviceEntry);
+			}
+			modelService.refresh(cart);
+			removeEmptyServiceGroups(cart);
+			normalizeEntryNumbers(cart);
+			recalculate(cart);
+		}
+		catch (final RuntimeException undoFailure)
+		{
+			LOG.error("Could not undo adding a service to cart {}", cart.getCode(), undoFailure);
+		}
+	}
+
+	protected List<ServiceProductModel> removeInvalid(final CartModel cart, final boolean recalculate)
+	{
 		if (cart.getEntries() == null)
 		{
 			return Collections.emptyList();
@@ -130,7 +178,10 @@ public class DefaultCartServiceSelectionService implements CartServiceSelectionS
 		modelService.refresh(cart);
 		removeEmptyServiceGroups(cart);
 		normalizeEntryNumbers(cart);
-		recalculate(cart);
+		if (recalculate)
+		{
+			recalculate(cart);
+		}
 		return removed;
 	}
 

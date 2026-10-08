@@ -2,6 +2,9 @@ package com.custom.facades.productservices.populators;
 
 import de.hybris.platform.commercefacades.order.EntryGroupData;
 import de.hybris.platform.commercefacades.order.data.AbstractOrderData;
+import de.hybris.platform.commercefacades.order.data.ConsignmentData;
+import de.hybris.platform.commercefacades.order.data.ConsignmentEntryData;
+import de.hybris.platform.commercefacades.order.data.OrderData;
 import de.hybris.platform.commercefacades.order.data.OrderEntryData;
 import de.hybris.platform.commercefacades.order.data.OrderEntryGroupData;
 import de.hybris.platform.commercefacades.product.PriceDataFactory;
@@ -65,28 +68,64 @@ public class ProductServiceOrderPopulator<S extends AbstractOrderModel, T extend
 		{
 			return; // e.g. mini cart: counts only
 		}
-		final Map<Integer, OrderEntryData> dataByNumber = new HashMap<>();
-		target.getEntries().forEach(e -> dataByNumber.put(e.getEntryNumber(), e));
-
 		final boolean isCart = source instanceof CartModel;
+		final Map<Integer, List<ProductServiceData>> selected = new HashMap<>();
+		final Map<Integer, List<ProductServiceData>> available = new HashMap<>();
 		for (final AbstractOrderEntryModel entry : source.getEntries())
 		{
-			final OrderEntryData data = dataByNumber.get(entry.getEntryNumber());
-			if (data == null || serviceEntryGroupService.isServiceEntry(entry))
+			if (serviceEntryGroupService.isServiceEntry(entry))
 			{
 				continue;
 			}
 			final List<AbstractOrderEntryModel> attached = serviceEntryGroupService.getServiceEntries(entry);
-			data.setSelectedServices(attached.stream().map(e -> toChargedData(source, e)).collect(Collectors.toList()));
+			selected.put(entry.getEntryNumber(), attached.stream().map(e -> toChargedData(source, e)).collect(Collectors.toList()));
 			if (isCart)
 			{
-				data.setAvailableServices(availableServices(source, entry, attached));
+				available.put(entry.getEntryNumber(), availableServices(source, entry, attached));
+			}
+		}
+
+		// the platform builds separate OrderEntryData instances for the entry list, the unconsigned entries and the
+		// consignment entries, so the services are attached to each of them
+		target.getEntries().forEach(e -> attach(e, selected, available, isCart));
+		if (target instanceof OrderData)
+		{
+			final OrderData order = (OrderData) target;
+			if (order.getUnconsignedEntries() != null)
+			{
+				order.getUnconsignedEntries().forEach(e -> attach(e, selected, available, false));
+			}
+			if (order.getConsignments() != null)
+			{
+				order.getConsignments().forEach(c -> attachToConsignment(c, selected));
 			}
 		}
 
 		final Set<Integer> serviceNumbers = serviceModels.stream().map(AbstractOrderEntryModel::getEntryNumber)
 				.collect(Collectors.toSet());
 		removeServiceEntries(target, serviceNumbers);
+	}
+
+	private void attach(final OrderEntryData data, final Map<Integer, List<ProductServiceData>> selected,
+			final Map<Integer, List<ProductServiceData>> available, final boolean withAvailable)
+	{
+		if (data == null || !selected.containsKey(data.getEntryNumber()))
+		{
+			return;
+		}
+		data.setSelectedServices(selected.get(data.getEntryNumber()));
+		if (withAvailable)
+		{
+			data.setAvailableServices(available.get(data.getEntryNumber()));
+		}
+	}
+
+	private void attachToConsignment(final ConsignmentData consignment, final Map<Integer, List<ProductServiceData>> selected)
+	{
+		if (consignment.getEntries() != null)
+		{
+			consignment.getEntries().forEach(ce -> attach(ce.getOrderEntry(), selected, Collections.emptyMap(), false));
+		}
 	}
 
 	protected List<ProductServiceData> availableServices(final AbstractOrderModel source, final AbstractOrderEntryModel entry,
@@ -124,10 +163,10 @@ public class ProductServiceOrderPopulator<S extends AbstractOrderModel, T extend
 			final PriceInformation price, final Long quantity)
 	{
 		final ProductServiceData data = base(service);
-		final double unit = price.getPriceValue().getValue();
+		final BigDecimal unit = BigDecimal.valueOf(price.getPriceValue().getValue());
 		data.setQuantity(quantity);
-		data.setPrice(price(order, Double.valueOf(unit)));
-		data.setTotalPrice(price(order, Double.valueOf(unit * quantity.longValue())));
+		data.setPrice(price(order, unit));
+		data.setTotalPrice(price(order, unit.multiply(BigDecimal.valueOf(quantity.longValue()))));
 		data.setSelected(false);
 		return data;
 	}
@@ -143,8 +182,12 @@ public class ProductServiceOrderPopulator<S extends AbstractOrderModel, T extend
 
 	private PriceData price(final AbstractOrderModel order, final Double value)
 	{
-		return priceDataFactory.create(PriceDataType.BUY, BigDecimal.valueOf(value == null ? 0d : value.doubleValue()),
-				order.getCurrency().getIsocode());
+		return price(order, BigDecimal.valueOf(value == null ? 0d : value.doubleValue()));
+	}
+
+	private PriceData price(final AbstractOrderModel order, final BigDecimal value)
+	{
+		return priceDataFactory.create(PriceDataType.BUY, value, order.getCurrency().getIsocode());
 	}
 
 	protected void adjustCounts(final T target, final List<AbstractOrderEntryModel> serviceModels)
@@ -176,6 +219,19 @@ public class ProductServiceOrderPopulator<S extends AbstractOrderModel, T extend
 		}
 		target.setEntries(target.getEntries().stream().filter(e -> !serviceNumbers.contains(e.getEntryNumber()))
 				.collect(Collectors.toList()));
+		if (target instanceof OrderData)
+		{
+			final OrderData order = (OrderData) target;
+			if (order.getUnconsignedEntries() != null)
+			{
+				order.setUnconsignedEntries(order.getUnconsignedEntries().stream()
+						.filter(e -> !serviceNumbers.contains(e.getEntryNumber())).collect(Collectors.toList()));
+			}
+			if (order.getConsignments() != null)
+			{
+				order.getConsignments().forEach(c -> removeServiceConsignmentEntries(c, serviceNumbers));
+			}
+		}
 		if (target.getRootGroups() != null)
 		{
 			target.getRootGroups().forEach(group -> showAsStandalone(group, serviceNumbers));
@@ -187,6 +243,16 @@ public class ProductServiceOrderPopulator<S extends AbstractOrderModel, T extend
 		if (target.getPickupOrderGroups() != null)
 		{
 			target.getPickupOrderGroups().forEach(group -> removeFromGroup(group, serviceNumbers));
+		}
+	}
+
+	private void removeServiceConsignmentEntries(final ConsignmentData consignment, final Set<Integer> serviceNumbers)
+	{
+		if (consignment.getEntries() != null)
+		{
+			consignment.setEntries(consignment.getEntries().stream()
+					.filter(ce -> ce.getOrderEntry() == null || !serviceNumbers.contains(ce.getOrderEntry().getEntryNumber()))
+					.collect(Collectors.toList()));
 		}
 	}
 

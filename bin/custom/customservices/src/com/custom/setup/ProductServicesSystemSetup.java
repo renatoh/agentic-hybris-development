@@ -45,6 +45,16 @@ public class ProductServicesSystemSetup extends AbstractSystemSetup
 	}
 
 	/**
+	 * &sect;4.2: re-applied on every system update (not only with sample data), because re-importing a store's Solr ImpEx
+	 * restores the original query text. Queries created later by project data are covered by the PROJECT step below.
+	 */
+	@SystemSetup(type = Type.ESSENTIAL, process = Process.ALL)
+	public void createEssentialData(final SystemSetupContext context)
+	{
+		excludeServiceProductsFromSolrIndex(context);
+	}
+
+	/**
 	 * &sect;5.9: service products, price groups and rows and SERVICE references are imported into the Staged catalog version
 	 * and published to Online through the catalog sync. {@code custominitialdata} is not an active extension in this
 	 * installation, so its {@code InitialDataSystemSetup} cannot host this.
