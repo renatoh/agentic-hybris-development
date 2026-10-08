@@ -296,6 +296,28 @@
 		<property name="typeCode" value="CartEntry"/>
 	</bean>
 
+	<!--
+	   Cart validation (run on /cart/checkout) removes entries whose product cannot be looked up by code, and service
+	   products are hidden from storefront lookups. These two platform beans are referenced by id from other platform beans,
+	   so they are redefined under the same id (properties copied from commerceservices-spring.xml). Upgrade check.
+	-->
+	<bean id="defaultCartValidationStrategy" class="com.custom.productservices.cart.ServiceAwareCartValidationStrategy">
+		<property name="modelService" ref="modelService"/>
+		<property name="cartService" ref="cartService"/>
+		<property name="productService" ref="productService"/>
+		<property name="commerceStockService" ref="commerceStockService"/>
+		<property name="baseStoreService" ref="baseStoreService"/>
+		<property name="userService" ref="userService"/>
+		<property name="configurationService" ref="configurationService"/>
+		<property name="cartValidationHooks" ref="cartValidationHooks"/>
+	</bean>
+	<bean id="defaultCartValidationWithoutCartAlteringStrategy"
+	      class="com.custom.productservices.cart.ServiceAwareCartValidationWithoutCartAlteringStrategy">
+		<property name="productService" ref="productService"/>
+		<property name="commerceStockService" ref="commerceStockService"/>
+		<property name="baseStoreService" ref="baseStoreService"/>
+	</bean>
+
 	<!-- ====== Project data (section 5.9): needs its own bean, a @SystemSetup class without one never runs ====== -->
 
 	<bean id="productServicesSystemSetup" class="com.custom.setup.ProductServicesSystemSetup" parent="abstractCoreSystemSetup">
