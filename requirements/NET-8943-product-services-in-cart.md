@@ -541,7 +541,10 @@ Recorded after implementation and review, so the spec matches the code. None of 
 3. **Service products are hidden by a search restriction, not an add-to-cart validator.** `Frontend_ServiceProduct`
    (`customergroup`, essential data in `customcore`) empties every storefront product lookup: no product page, quick view or
    add-by-code. A validator was tried and removed because restoring a saved cart re-adds every entry through the add-to-cart
-   strategy and the validator broke it. `getAvailableServices` reads the product's references with search restrictions
+   strategy and the validator broke it. Restoring an *expired* saved cart still loses its services: the rebuild re-adds them
+   without their `SERVICE` group, so they are orphans and the next calculation or cart-page load removes them as invalid
+   (the cart page reports their names; not verified at runtime). The rebuild may also skip the calculation hook, so the
+   minicart total can briefly include those orphan prices. `getAvailableServices` reads the product's references with search restrictions
    disabled, since reading a relation also applies them. Only `APPROVED` services are offered.
 4. **Stale services are removed in more places than §5.4 lists.** The `beforeCalculate` hook removes an invalid service
    entry before any calculation (restore, update, add, merge, checkout), because pricing it would throw. The names are kept
