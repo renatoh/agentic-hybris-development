@@ -3,49 +3,42 @@
  */
 package com.custom.setup;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import de.hybris.bootstrap.annotations.UnitTest;
+import de.hybris.platform.commerceservices.setup.SetupImpexService;
+import de.hybris.platform.commerceservices.setup.SetupSyncJobService;
 import de.hybris.platform.core.initialization.SystemSetupContext;
-import de.hybris.platform.servicelayer.model.ModelService;
-import de.hybris.platform.servicelayer.search.FlexibleSearchQuery;
-import de.hybris.platform.servicelayer.search.FlexibleSearchService;
-import de.hybris.platform.servicelayer.search.impl.SearchResultImpl;
-import de.hybris.platform.solrfacetsearch.model.config.SolrIndexerQueryModel;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.List;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
 
 
 /**
- * NET-8943 &sect;4.2, AC6: the ESSENTIAL step re-applies the {@code ServiceProduct} exclusion to every Product-based
- * Solr indexer query on each system update, saves only the queries it actually changed, and is idempotent.
+ * NET-8943 &sect;5.9 / review round 1: the PROJECT step imports the sample data ImpEx, then the Solr ImpEx, then
+ * synchronizes the sample catalog; a failing sync is logged, never propagated.
  */
 @UnitTest
 @RunWith(MockitoJUnitRunner.class)
 public class ProductServicesSystemSetupTest
 {
-	private static final String FULL_QUERY = "SELECT {PK} FROM {Product} WHERE {code} NOT IN( {{ SELECT {code} FROM {GenericVariantProduct} }})";
-	private static final String ORDER_QUERY = "SELECT {PK} FROM {Order}";
+	private static final String SAMPLE_IMPEX = "/customservices/impex/customservices-productservices-sampledata.impex";
+	private static final String SOLR_IMPEX = "/customservices/impex/customservices-productservices-solr.impex";
+	private static final String SAMPLE_CATALOG = "electronicsProductCatalog";
 
 	@Mock
-	private FlexibleSearchService flexibleSearchService;
+	private SetupImpexService setupImpexService;
 	@Mock
-	private ModelService modelService;
+	private SetupSyncJobService setupSyncJobService;
 	@Mock
 	private SystemSetupContext context;
 
@@ -55,68 +48,55 @@ public class ProductServicesSystemSetupTest
 	public void setUp()
 	{
 		setup = new ProductServicesSystemSetup();
-		setup.setFlexibleSearchService(flexibleSearchService);
-		setup.setModelService(modelService);
-	}
-
-	private static SolrIndexerQueryModel indexerQuery(final String query)
-	{
-		final SolrIndexerQueryModel model = new SolrIndexerQueryModel();
-		model.setQuery(query);
-		return model;
-	}
-
-	private void givenIndexerQueries(final SolrIndexerQueryModel... queries)
-	{
-		final List<SolrIndexerQueryModel> list = Arrays.asList(queries);
-		given(flexibleSearchService.<SolrIndexerQueryModel> search(any(FlexibleSearchQuery.class)))
-				.willReturn(new SearchResultImpl<>(list, list.size(), list.size(), 0));
-	}
-
-	@SuppressWarnings("unchecked")
-	private List<Object> savedQueries()
-	{
-		final ArgumentCaptor<Collection<Object>> saved = ArgumentCaptor.forClass(Collection.class);
-		verify(modelService).saveAll(saved.capture());
-		return new ArrayList<>(saved.getValue());
+		setup.setSetupImpexService(setupImpexService);
+		setup.setSetupSyncJobService(setupSyncJobService);
 	}
 
 	@Test
-	public void shouldExcludeServiceProductsFromProductQueriesOnly()
+	public void shouldImportSampleDataBeforeSolrDataAndThenSyncTheCatalog()
 	{
-		final SolrIndexerQueryModel productQuery = indexerQuery(FULL_QUERY);
-		final SolrIndexerQueryModel orderQuery = indexerQuery(ORDER_QUERY);
-		final SolrIndexerQueryModel emptyQuery = indexerQuery(null);
-		givenIndexerQueries(productQuery, orderQuery, emptyQuery);
+		setup.createProjectData(context);
 
-		setup.createEssentialData(context);
-
-		assertEquals(Collections.singletonList(productQuery), savedQueries());
-		assertEquals(ServiceProductSolrQueryAdjuster.excludeServiceProducts(FULL_QUERY), productQuery.getQuery());
-		assertTrue(productQuery.getQuery().contains("{ServiceProduct}"));
-		assertEquals(ORDER_QUERY, orderQuery.getQuery());
+		final InOrder order = inOrder(setupImpexService, setupSyncJobService);
+		order.verify(setupImpexService).importImpexFile(SAMPLE_IMPEX, true);
+		order.verify(setupImpexService).importImpexFile(SOLR_IMPEX, true);
+		order.verify(setupSyncJobService).executeCatalogSyncJob(SAMPLE_CATALOG);
 	}
 
 	@Test
-	public void shouldSaveNothingWhenTheExclusionIsAlreadyThere()
+	public void shouldImportNoOtherImpex()
 	{
-		final String alreadyExcluded = ServiceProductSolrQueryAdjuster.excludeServiceProducts(FULL_QUERY);
-		final SolrIndexerQueryModel productQuery = indexerQuery(alreadyExcluded);
-		givenIndexerQueries(productQuery);
+		setup.createProjectData(context);
 
-		setup.createEssentialData(context);
-
-		assertTrue(savedQueries().isEmpty());
-		assertEquals(alreadyExcluded, productQuery.getQuery());
+		verify(setupImpexService).importImpexFile(SAMPLE_IMPEX, true);
+		verify(setupImpexService).importImpexFile(SOLR_IMPEX, true);
+		verifyNoMoreInteractions(setupImpexService);
 	}
 
 	@Test
-	public void shouldSaveNothingWithoutIndexerQueries()
+	public void shouldSyncOnlyTheSampleCatalog()
 	{
-		givenIndexerQueries();
+		setup.createProjectData(context);
 
-		setup.createEssentialData(context);
+		verify(setupSyncJobService).executeCatalogSyncJob(SAMPLE_CATALOG);
+		verifyNoMoreInteractions(setupSyncJobService);
+	}
 
-		assertTrue(savedQueries().isEmpty());
+	@Test
+	public void shouldNotPropagateASyncFailure()
+	{
+		given(setupSyncJobService.executeCatalogSyncJob(anyString())).willThrow(new IllegalStateException("sync failed"));
+
+		setup.createProjectData(context);
+
+		verify(setupImpexService).importImpexFile(SAMPLE_IMPEX, true);
+		verify(setupImpexService).importImpexFile(SOLR_IMPEX, true);
+		verify(setupSyncJobService).executeCatalogSyncJob(SAMPLE_CATALOG);
+	}
+
+	@Test
+	public void shouldOfferNoInitializationOptions()
+	{
+		assertTrue(setup.getInitializationOptions().isEmpty());
 	}
 }

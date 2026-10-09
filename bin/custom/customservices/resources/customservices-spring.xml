@@ -320,10 +320,7 @@
 
 	<!-- ====== Project data (section 5.9): needs its own bean, a @SystemSetup class without one never runs ====== -->
 
-	<bean id="productServicesSystemSetup" class="com.custom.setup.ProductServicesSystemSetup" parent="abstractCoreSystemSetup">
-		<property name="flexibleSearchService" ref="flexibleSearchService"/>
-		<property name="modelService" ref="modelService"/>
-	</bean>
+	<bean id="productServicesSystemSetup" class="com.custom.setup.ProductServicesSystemSetup" parent="abstractCoreSystemSetup"/>
 
 	<!-- ====== Stock (section 5.5): services are never blocked by stock ====== -->
 

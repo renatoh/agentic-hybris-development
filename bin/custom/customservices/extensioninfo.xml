@@ -19,7 +19,7 @@
         <!-- NET-8943: ServiceProductModel, ServicePriceCondition and Product.servicePriceCondition are generated from customcore-items.xml -->
         <requires-extension name="customcore"/>
 
-        <!-- NET-8943: ProductServicesSystemSetup adjusts the SolrIndexerQuery items (solrfacetsearch is active in localextensions.xml) -->
+        <!-- NET-8943: the product services Solr ImpEx updates SolrIndexerQuery items (solrfacetsearch is active in localextensions.xml) -->
         <requires-extension name="solrfacetsearch"/>
 
         <coremodule generated="true" manager="com.custom.jalo.CustomservicesManager" packageroot="com.custom"/>

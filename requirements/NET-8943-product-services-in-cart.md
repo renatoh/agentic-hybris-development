@@ -541,10 +541,13 @@ Recorded after implementation and review, so the spec matches the code. None of 
 3. **Service products are hidden by a search restriction, not an add-to-cart validator.** `Frontend_ServiceProduct`
    (`customergroup`, essential data in `customcore`) empties every storefront product lookup: no product page, quick view or
    add-by-code. A validator was tried and removed because restoring a saved cart re-adds every entry through the add-to-cart
-   strategy and the validator broke it. Restoring an *expired* saved cart still loses its services: the rebuild re-adds them
-   without their `SERVICE` group, so they are orphans and the next calculation or cart-page load removes them as invalid
-   (the cart page reports their names; not verified at runtime). The rebuild may also skip the calculation hook, so the
-   minicart total can briefly include those orphan prices. `getAvailableServices` reads the product's references with search restrictions
+   strategy and the validator broke it. Restoring an *expired* saved cart that contains services
+   fails as a whole (corrected in PR #2 review round 1, from reading the platform code; not verified at runtime): the
+   rebuild re-adds every entry through the add-to-cart strategy with method hooks disabled (the platform sets `enableHooks`
+   on the outer parameter, not on the per-entry one), so the cleanup hook does not run, the re-added service has no
+   `SERVICE` group and the price hook throws `ServicePriceNotFoundException`. `CartRestorationFilter` catches exactly that
+   exception and flags the restoration as failed, so the page still loads, but the shopper gets no restored cart (the old
+   cart stays in the database). A fix would override the restoration strategy to skip service entries on rebuild. `getAvailableServices` reads the product's references with search restrictions
    disabled, since reading a relation also applies them. Only `APPROVED` services are offered.
 4. **Stale services are removed in more places than §5.4 lists.** The `beforeCalculate` hook removes an invalid service
    entry before any calculation (restore, update, add, merge, checkout), because pricing it would throw. The names are kept
@@ -554,10 +557,17 @@ Recorded after implementation and review, so the spec matches the code. None of 
    add into an existing line goes through `CartService.updateQuantities`, which calls no update hook.
 6. **`addService` uses `CartService.addNewEntry`** (not the add-to-cart strategy), in the service's own unit, and undoes
    itself if the recalculation fails. No add-to-cart hooks or max-order-quantity rules apply to a service.
-7. **Solr exclusion** is a rewrite of the `SolrIndexerQuery` text (adds `NOT IN ServiceProduct`), applied as essential data on
-   every update and again after sample data. It is not durable against a later re-import of a store's Solr ImpEx, and a
-   fresh `ant initialize` relies on the project step running after the store's project data. A durable version would put the
-   clause into each store's indexer query data.
+7. **Solr exclusion** (changed in PR #2 review round 1) is an ImpEx,
+   `customservices/resources/customservices/impex/customservices-productservices-solr.impex`, imported as project data by
+   `ProductServicesSystemSetup`. It re-imports the electronics store's four indexer queries (`electronics-*` and
+   `electronics-visibility-*`) with SAP's text plus `{itemtype} <> ServiceProduct` (full queries) or `{p:itemtype} <>
+   ServiceProduct` inside each union part (update queries). `<>` excludes only the exact type, so a future `ServiceProduct`
+   subtype would be indexed. It runs only with the `customservices` project data and must run after the store's own project data,
+   which holds for a system update that selects `customservices` project data but **not for a fresh `ant initialize`**:
+   extensions run in build order and `customservices` comes before `electronicsstore`, so the ImpEx finds no rows, its
+   insert fails (mandatory `type` missing; logged, not thrown) and the store then creates its queries without the exclusion.
+   The same order also runs the sample-data ImpEx before `electronicsProductCatalog` exists. Open decision. A later
+   re-import of the store's Solr ImpEx also reverts it. For our own store, put the condition into its Solr ImpEx.
 8. **Service prices are global.** Group rows have no product and no `catalogVersion` (the installation's other price rows
    carry none either), and the group code is `<serviceCode>_<condition>`, so all stores sharing a currency share service
    prices. Store-specific service prices need different service codes or user price groups.
