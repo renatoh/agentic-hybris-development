@@ -780,8 +780,16 @@ public class CartPageController extends AbstractCartPageController
 
 		try
 		{
+			// NET-8943: the line's services are removed with it and are not saved (SavedForLaterEntry holds product and
+			// quantity only), so the shopper is told; read before the save removes the line
+			final boolean hadServices = hasSelectedServices(entryNumber);
 			savedForLaterFacade.saveCartEntryForLater(entryNumber);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater");
+			if (hadServices)
+			{
+				GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.INFO_MESSAGES_HOLDER,
+						"basket.page.message.savedForLater.servicesRemoved");
+			}
 		}
 		// NoSuchElementException: entryNumber no longer matches a cart entry (stale page/tampered
 		// request). IllegalStateException: DefaultSavedForLaterFacade wraps a
@@ -839,6 +847,14 @@ public class CartPageController extends AbstractCartPageController
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.removedSavedForLater");
 		}
 		return REDIRECT_CART_URL;
+	}
+
+	/** NET-8943: whether the cart line has services selected (service entries themselves are never cart lines). */
+	protected boolean hasSelectedServices(final long entryNumber)
+	{
+		return getCartFacade().getSessionCart().getEntries().stream()
+				.filter(entry -> entry.getEntryNumber() != null && entry.getEntryNumber().longValue() == entryNumber)
+				.anyMatch(entry -> entry.getSelectedServices() != null && !entry.getSelectedServices().isEmpty());
 	}
 
 	protected Optional<String> findProductCodeForEntry(final long entryNumber)

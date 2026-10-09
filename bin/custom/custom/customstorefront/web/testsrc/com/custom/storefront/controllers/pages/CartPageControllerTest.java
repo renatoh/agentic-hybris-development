@@ -6,9 +6,11 @@ package com.custom.storefront.controllers.pages;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 import de.hybris.bootstrap.annotations.UnitTest;
 import de.hybris.platform.acceleratorservices.config.SiteConfigService;
@@ -27,14 +29,17 @@ import de.hybris.platform.commercefacades.product.ProductOption;
 import de.hybris.platform.commercefacades.product.data.ProductData;
 import de.hybris.platform.commerceservices.order.CommerceCartModificationException;
 import de.hybris.platform.commerceservices.order.CommerceCartModificationStatus;
+import de.hybris.platform.commercefacades.user.UserFacade;
 import de.hybris.platform.servicelayer.session.SessionService;
 
 import javax.servlet.http.HttpServletRequest;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -50,6 +55,8 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
 import com.custom.facades.productservices.ProductServiceFacade;
+import com.custom.facades.productservices.data.ProductServiceData;
+import com.custom.facades.savedforlater.SavedForLaterFacade;
 
 
 @UnitTest
@@ -113,6 +120,12 @@ public class CartPageControllerTest
 	/** NET-8943: the quantity update first asks whether the entry is a service; unstubbed = false, i.e. a product line */
 	@Mock
 	private ProductServiceFacade productServiceFacade;
+
+	@Mock
+	private SavedForLaterFacade savedForLaterFacade;
+
+	@Mock
+	private UserFacade userFacade;
 
 
 	@Before
@@ -192,6 +205,89 @@ public class CartPageControllerTest
 				.updateCartQuantities(ENTRY_NUMBER, model, updateQuantityForm, bindingResult, httpServletRequest, redirectAttributes);
 
 		Assert.assertTrue(containsMessage(redirectAttributes, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.message.update.reducedNumberOfItemsAdded.lowStock"));
+	}
+
+	// --- NET-8941 / NET-8943: save for later ---------------------------------------------------------------------------
+
+	private static OrderEntryData cartLine(final long entryNumber, final String productCode,
+			final List<ProductServiceData> selectedServices)
+	{
+		final ProductData lineProduct = new ProductData();
+		lineProduct.setCode(productCode);
+		final OrderEntryData line = new OrderEntryData();
+		line.setEntryNumber(Integer.valueOf((int) entryNumber));
+		line.setProduct(lineProduct);
+		line.setSelectedServices(selectedServices);
+		return line;
+	}
+
+	private void givenTheCartLines(final OrderEntryData... lines)
+	{
+		given(cartFacade.getSessionCart()).willReturn(cart);
+		given(cart.getEntries()).willReturn(Arrays.asList(lines));
+	}
+
+	@Test
+	public void shouldTellTheShopperThatTheServicesWereRemovedWhenSavingALineWithServicesForLater()
+	{
+		given(Boolean.valueOf(userFacade.isAnonymousUser())).willReturn(Boolean.FALSE);
+		givenTheCartLines(cartLine(ENTRY_NUMBER, PRODUCT_CODE, Collections.singletonList(new ProductServiceData())),
+				cartLine(1, "other", Collections.emptyList()));
+
+		final String view = controller.saveEntryForLater(ENTRY_NUMBER, redirectAttributes);
+
+		Assert.assertEquals("redirect:/cart", view);
+		verify(savedForLaterFacade).saveCartEntryForLater(ENTRY_NUMBER);
+		Assert.assertTrue(containsMessage(redirectAttributes, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater"));
+		Assert.assertTrue(containsMessage(redirectAttributes, GlobalMessages.INFO_MESSAGES_HOLDER,
+				"basket.page.message.savedForLater.servicesRemoved"));
+		Assert.assertFalse(redirectAttributes.getFlashAttributes().containsKey(GlobalMessages.ERROR_MESSAGES_HOLDER));
+	}
+
+	@Test
+	public void shouldOnlyConfirmWhenSavingALineWithoutServicesForLater()
+	{
+		given(Boolean.valueOf(userFacade.isAnonymousUser())).willReturn(Boolean.FALSE);
+		// another line has services - only the saved line counts
+		givenTheCartLines(cartLine(ENTRY_NUMBER, PRODUCT_CODE, null),
+				cartLine(1, "other", Collections.singletonList(new ProductServiceData())));
+
+		final String view = controller.saveEntryForLater(ENTRY_NUMBER, redirectAttributes);
+
+		Assert.assertEquals("redirect:/cart", view);
+		verify(savedForLaterFacade).saveCartEntryForLater(ENTRY_NUMBER);
+		Assert.assertTrue(containsMessage(redirectAttributes, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater"));
+		Assert.assertFalse(redirectAttributes.getFlashAttributes().containsKey(GlobalMessages.INFO_MESSAGES_HOLDER));
+	}
+
+	@Test
+	public void shouldOnlyReportTheErrorWhenTheLineCannotBeSavedForLater()
+	{
+		given(Boolean.valueOf(userFacade.isAnonymousUser())).willReturn(Boolean.FALSE);
+		givenTheCartLines(cartLine(ENTRY_NUMBER, PRODUCT_CODE, Collections.singletonList(new ProductServiceData())));
+		willThrow(new NoSuchElementException("No product cart entry with number 0"))
+				.given(savedForLaterFacade).saveCartEntryForLater(ENTRY_NUMBER);
+
+		final String view = controller.saveEntryForLater(ENTRY_NUMBER, redirectAttributes);
+
+		Assert.assertEquals("redirect:/cart", view);
+		Assert.assertTrue(containsMessage(redirectAttributes, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.savedForLater"));
+		Assert.assertFalse(redirectAttributes.getFlashAttributes().containsKey(GlobalMessages.CONF_MESSAGES_HOLDER));
+		Assert.assertFalse(redirectAttributes.getFlashAttributes().containsKey(GlobalMessages.INFO_MESSAGES_HOLDER));
+	}
+
+	@Test
+	public void shouldSendAnAnonymousShopperToLoginWithoutSavingForLater()
+	{
+		given(Boolean.valueOf(userFacade.isAnonymousUser())).willReturn(Boolean.TRUE);
+		givenTheCartLines(cartLine(ENTRY_NUMBER, PRODUCT_CODE, Collections.singletonList(new ProductServiceData())));
+
+		final String view = controller.saveEntryForLater(ENTRY_NUMBER, redirectAttributes);
+
+		Assert.assertEquals("redirect:/login", view);
+		verify(sessionService).setAttribute(CartPageController.PENDING_SAVE_FOR_LATER_PRODUCT_CODE, PRODUCT_CODE);
+		verifyNoInteractions(savedForLaterFacade);
+		Assert.assertTrue(redirectAttributes.getFlashAttributes().isEmpty());
 	}
 
 	private void mockUpdateQuantityWithGivenStatus(final String modificationStatus) throws CommerceCartModificationException

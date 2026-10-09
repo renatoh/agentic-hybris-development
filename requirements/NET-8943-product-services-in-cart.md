@@ -570,7 +570,9 @@ Recorded after implementation and review, so the spec matches the code. None of 
    `importCoreData` / `importSampleData` parameter is not `no`). `ProductServicesSystemSetup.createProjectData` stays for a
    system update with `customservices` project data on an existing store; it skips when `electronicsProductCatalog` does
    not exist yet. All of it is INSERT_UPDATE/UPDATE, so running both in one update only repeats the same values and a
-   second catalog sync. **Gap:** the visibility queries are created by SAP's automatic `projectdata-*.impex` import, which
+   second catalog sync. Edge: the store's core-data step runs its own full index before `CoreDataImportedEvent`, so
+   re-running only the store's core data on a system that already has services indexes them until the next full index.
+   **Gap:** the visibility queries are created by SAP's automatic `projectdata-*.impex` import, which
    runs after the store's setup and its events, so they cannot be fixed from the listener: after a fresh initialize, or
    any later `electronicsstore` project data run, they are SAP's text again until `customservices` project data is re-run.
    That index is not assigned to any site. For our own store, put the condition into its Solr ImpEx.
@@ -588,6 +590,6 @@ Recorded after implementation and review, so the spec matches the code. None of 
     never shows service entries as rows, and `DefaultSavedForLaterFacade.findCartEntry` treats a service entry number like
     an unknown one. Saving a product line removes it from the cart, which removes its services (same cascade as removing
     the line); `SavedForLaterEntry` stores only product and quantity, so the services are **not** remembered and are not
-    back when the product is moved to the cart - the shopper ticks them again. Keeping them would need a model change
-    (open). Moving a product back into a cart that already holds the same product merges into that line and its services
+    back when the product is moved to the cart - the shopper ticks them again; the cart page says so with an info
+    message (`basket.page.message.savedForLater.servicesRemoved`). Keeping them would need a model change (open). Moving a product back into a cart that already holds the same product merges into that line and its services
     follow the new quantity (§5.4).

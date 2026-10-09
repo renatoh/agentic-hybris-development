@@ -34,7 +34,10 @@ public class ProductServicesSystemSetup extends AbstractSystemSetup
 	protected static final String SOLR_IMPEX = "/customservices/impex/customservices-productservices-solr.impex";
 	/** &sect;4.2: the same for the visibility index; only importable here (see the file's header). */
 	protected static final String SOLR_VISIBILITY_IMPEX = "/customservices/impex/customservices-productservices-solr-visibility.impex";
-	/** The catalog the sample data lives in; the ImpEx names the same catalog. */
+	/**
+	 * The catalog the sample data lives in; the ImpEx names the same catalog, and the event listener bean's
+	 * {@code productCatalogName} ({@code electronics}) must name the same store.
+	 */
 	protected static final String SAMPLE_CATALOG = "electronicsProductCatalog";
 	protected static final String SAMPLE_CATALOG_VERSION = "Staged";
 

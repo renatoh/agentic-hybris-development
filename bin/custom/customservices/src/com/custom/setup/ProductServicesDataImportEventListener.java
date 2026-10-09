@@ -17,7 +17,10 @@ import org.springframework.beans.factory.annotation.Required;
  * order), see {@link ProductServicesSystemSetup}.
  * <ul>
  * <li>{@link CoreDataImportedEvent}: the store's core data has just re-created its Solr indexer queries from SAP's text,
- * so the {@code ServiceProduct} exclusion is applied again before the store's sample data runs its full index.</li>
+ * so the {@code ServiceProduct} exclusion is applied again before the store's sample data runs its full index. The
+ * store's core-data step itself already ran a full index (when {@code activateSolrCronJobs} is set) before this event:
+ * re-running only the store's core data on a system that already has services indexes them until the next full
+ * index.</li>
  * <li>{@link SampleDataImportedEvent}: the store's products exist, so the services, their prices and references and the
  * Solr exclusion are imported and the catalog is synchronized.</li>
  * </ul>

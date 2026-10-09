@@ -330,6 +330,7 @@
 	<bean id="productServicesDataImportEventListener" class="com.custom.setup.ProductServicesDataImportEventListener"
 	      parent="abstractEventListener">
 		<property name="productServicesSystemSetup" ref="productServicesSystemSetup"/>
+		<!-- must match ProductServicesSystemSetup.SAMPLE_CATALOG (electronicsProductCatalog) and the sample ImpEx -->
 		<property name="productCatalogName" value="electronics"/>
 	</bean>
 
