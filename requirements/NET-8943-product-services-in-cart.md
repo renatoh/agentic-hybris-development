@@ -557,17 +557,23 @@ Recorded after implementation and review, so the spec matches the code. None of 
    add into an existing line goes through `CartService.updateQuantities`, which calls no update hook.
 6. **`addService` uses `CartService.addNewEntry`** (not the add-to-cart strategy), in the service's own unit, and undoes
    itself if the recalculation fails. No add-to-cart hooks or max-order-quantity rules apply to a service.
-7. **Solr exclusion** (changed in PR #2 review round 1) is an ImpEx,
-   `customservices/resources/customservices/impex/customservices-productservices-solr.impex`, imported as project data by
-   `ProductServicesSystemSetup`. It re-imports the electronics store's four indexer queries (`electronics-*` and
-   `electronics-visibility-*`) with SAP's text plus `{itemtype} <> ServiceProduct` (full queries) or `{p:itemtype} <>
-   ServiceProduct` inside each union part (update queries). `<>` excludes only the exact type, so a future `ServiceProduct`
-   subtype would be indexed. It runs only with the `customservices` project data and must run after the store's own project data,
-   which holds for a system update that selects `customservices` project data but **not for a fresh `ant initialize`**:
-   extensions run in build order and `customservices` comes before `electronicsstore`, so the ImpEx finds no rows, its
-   insert fails (mandatory `type` missing; logged, not thrown) and the store then creates its queries without the exclusion.
-   The same order also runs the sample-data ImpEx before `electronicsProductCatalog` exists. Open decision. A later
-   re-import of the store's Solr ImpEx also reverts it. For our own store, put the condition into its Solr ImpEx.
+7. **Solr exclusion and import order** (changed in PR #2 review rounds 1 and 2). The exclusion is ImpEx:
+   `customservices-productservices-solr.impex` re-imports the electronics store's `electronics-fullQuery` /
+   `electronics-updateQuery` (the `electronicsIndex` the site searches) with SAP's text plus `{itemtype} <> ServiceProduct`
+   (full) or `{p:itemtype} <> ServiceProduct` inside each union part (update); `...-solr-visibility.impex` does the same
+   for the two `electronics-visibility-*` queries. `<>` excludes only the exact type, so a future `ServiceProduct` subtype
+   would be indexed. Because `customservices` runs its setup before `electronicsstore` (build order), the data is imported
+   by `ProductServicesDataImportEventListener` on the store's own events: `CoreDataImportedEvent` re-applies the Solr ImpEx
+   (the store's core data has just re-created SAP's queries, before its sample data runs the full index), and
+   `SampleDataImportedEvent` imports the services sample data, the Solr ImpEx and syncs the catalog. Only for the
+   `ImportData` product catalog configured on the bean (`electronics`) and only when the store imported that data (its
+   `importCoreData` / `importSampleData` parameter is not `no`). `ProductServicesSystemSetup.createProjectData` stays for a
+   system update with `customservices` project data on an existing store; it skips when `electronicsProductCatalog` does
+   not exist yet. All of it is INSERT_UPDATE/UPDATE, so running both in one update only repeats the same values and a
+   second catalog sync. **Gap:** the visibility queries are created by SAP's automatic `projectdata-*.impex` import, which
+   runs after the store's setup and its events, so they cannot be fixed from the listener: after a fresh initialize, or
+   any later `electronicsstore` project data run, they are SAP's text again until `customservices` project data is re-run.
+   That index is not assigned to any site. For our own store, put the condition into its Solr ImpEx.
 8. **Service prices are global.** Group rows have no product and no `catalogVersion` (the installation's other price rows
    carry none either), and the group code is `<serviceCode>_<condition>`, so all stores sharing a currency share service
    prices. Store-specific service prices need different service codes or user price groups.

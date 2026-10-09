@@ -322,6 +322,17 @@
 
 	<bean id="productServicesSystemSetup" class="com.custom.setup.ProductServicesSystemSetup" parent="abstractCoreSystemSetup"/>
 
+	<!--
+	   On a fresh initialize customservices runs before electronicsstore (build order): import the product services data
+	   right after the store's own core/sample data import instead. productCatalogName is the store's ImportData product
+	   catalog name the sample ImpEx belongs to (data of this sample, not a global setting).
+	-->
+	<bean id="productServicesDataImportEventListener" class="com.custom.setup.ProductServicesDataImportEventListener"
+	      parent="abstractEventListener">
+		<property name="productServicesSystemSetup" ref="productServicesSystemSetup"/>
+		<property name="productCatalogName" value="electronics"/>
+	</bean>
+
 	<!-- ====== Stock (section 5.5): services are never blocked by stock ====== -->
 
 	<alias alias="commerceStockService" name="serviceAwareCommerceStockService"/>

@@ -4,10 +4,9 @@
 # Service products are never standalone products, but the store's indexer queries select every Product, subtypes
 # included. This file re-imports those SolrIndexerQuery rows with the query text copied from SAP's ImpEx and ONLY an
 # exclusion condition added:
-#   - electronics-fullQuery / electronics-updateQuery:
+#   - electronics-fullQuery / electronics-updateQuery (electronicsIndex, the index the electronics site searches):
 #       electronicsstore/resources/electronicsstore/import/coredata/stores/electronics/solr.impex
-#   - electronics-visibility-fullQuery / electronics-visibility-updateQuery:
-#       electronicsstore/resources/impex/projectdata-productVisibilitySolr.impex
+#   (the electronics-visibility-* queries are in customservices-productservices-solr-visibility.impex)
 # On an SAP upgrade, compare against SAP's current version of those files and re-apply the condition.
 #
 # The condition filters on the row's own type, a single-row lookup by the unique type code:
@@ -18,8 +17,9 @@
 # Note: <> only excludes the exact type ServiceProduct. A future subtype of ServiceProduct WOULD be indexed again.
 # Do not use {Product!} instead: it would also drop ElectronicsColorVariantProduct and every other Product subtype.
 #
-# Imported as project data by ProductServicesSystemSetup, after the store's own Solr data. For our own store later,
-# put the condition directly into custominitialdata's solr.impex instead.
+# Imported by ProductServicesDataImportEventListener right after the store's core data (which re-creates these queries)
+# and after its sample data, and by ProductServicesSystemSetup.createProjectData when the catalog already exists.
+# For our own store later, put the condition directly into custominitialdata's solr.impex instead.
 # -----------------------------------------------------------------------
 
 INSERT_UPDATE SolrIndexerQuery;identifier[unique=true];query
@@ -48,7 +48,3 @@ SELECT DISTINCT tbl.pk, tbl.code FROM (
 ) tbl WHERE (tbl.varianttype IS NULL OR tbl.varianttype NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) )
       AND tbl.code NOT IN({{ SELECT {code} FROM {GenericVariantProduct} }}) ORDER BY tbl.code
 "
-
-;electronics-visibility-fullQuery;"SELECT {PK} FROM {Product} WHERE ({varianttype} IS NULL OR {varianttype} NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) ) AND {code} NOT IN( {{ SELECT {code} FROM {GenericVariantProduct} }}) AND {itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})"
-
-;electronics-visibility-updateQuery;"SELECT DISTINCT tbl.pk, tbl.code FROM ({{ SELECT DISTINCT {p:PK} AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {Product AS p LEFT JOIN CustomerReview AS cr ON {cr:product}={p:PK} LEFT JOIN CatalogVersion AS cv ON {cv:PK}={p:catalogversion}} WHERE ({p:modifiedtime} >= ?lastIndexTime OR {cr:modifiedtime} >= ?lastIndexTime OR {cv:modifiedtime} >= ?lastIndexTime) AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }}) }} UNION {{ SELECT {p:PK}  AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {Product AS p} WHERE {p:code} IN ({{ SELECT DISTINCT {sl:productCode} FROM {StockLevel AS sl} WHERE {sl:modifiedtime} >= ?lastIndexTime }}) AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})}} UNION {{ SELECT {p:PK}  AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {CategoryProductRelation AS cpr LEFT JOIN Product AS p ON {cpr:target}={p:PK}} WHERE {cpr:source} IN ({{ SELECT DISTINCT {c:pk} FROM {Category AS c} WHERE {c:modifiedtime} >= ?lastIndexTime }}) AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})}}) tbl WHERE (tbl.varianttype IS NULL OR tbl.varianttype NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) ) AND tbl.code NOT IN({{ SELECT {code} FROM {GenericVariantProduct} }}) ORDER BY tbl.code"
