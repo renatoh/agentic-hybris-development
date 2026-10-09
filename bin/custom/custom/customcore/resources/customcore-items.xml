@@ -25,6 +25,27 @@
             <value code="WHITE"/>
             <value code="YELLOW"/>
         </enumtype>
+
+        <!-- NET-8943: price condition of a product; selects which service price group applies to it -->
+        <enumtype code="ServicePriceCondition" autocreate="true" generate="true" dynamic="true">
+            <description>Price condition of a product. Together with a service code it names the ProductPriceGroup
+                (serviceCode_conditionCode) that holds the service's price for products with this condition.
+            </description>
+            <value code="LOW"/>
+            <value code="MEDIUM"/>
+            <value code="HIGH"/>
+        </enumtype>
+
+        <!-- NET-8943: reference type linking a product to the shared service products it offers.
+             Not a dynamic enum, so the value is added at build time. -->
+        <enumtype code="ProductReferenceTypeEnum" autocreate="false" generate="false">
+            <value code="SERVICE"/>
+        </enumtype>
+
+        <!-- NET-8943: entry group type tying a product entry to its service entries (dynamic enum) -->
+        <enumtype code="GroupType" autocreate="false" generate="false" dynamic="true">
+            <value code="SERVICE"/>
+        </enumtype>
     </enumtypes>
 
     <itemtypes>
@@ -101,6 +122,29 @@
                         <persistence type="property"/>
                     </attribute>
                 </attributes>
+            </itemtype>
+        </typegroup>
+
+        <!-- NET-8943: services sold with products -->
+        <typegroup name="Services">
+            <itemtype code="Product" autocreate="false" generate="false">
+                <attributes>
+                    <attribute qualifier="servicePriceCondition" type="ServicePriceCondition">
+                        <description>Selects the service price group for this product's services. A product without a
+                            condition offers no services.
+                        </description>
+                        <persistence type="property"/>
+                        <modifiers optional="true"/>
+                    </attribute>
+                </attributes>
+            </itemtype>
+
+            <itemtype code="ServiceProduct" extends="Product"
+                      autocreate="true" generate="true"
+                      jaloclass="com.custom.core.jalo.ServiceProduct">
+                <description>Shared service (warranty extension, installation) sold on top of a product. Never a
+                    standalone product; priced per product through ProductPriceGroup rows.
+                </description>
             </itemtype>
         </typegroup>
 

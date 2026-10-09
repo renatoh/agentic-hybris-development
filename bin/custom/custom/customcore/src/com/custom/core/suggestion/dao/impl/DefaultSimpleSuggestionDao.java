@@ -50,6 +50,9 @@ public class DefaultSimpleSuggestionDao extends AbstractItemDao implements Simpl
 
 	private static final String REF_QUERY_TYPE = " AND {r.referenceType} IN (?referenceType)";
 	private static final String REF_QUERY_TYPES = " AND {r.referenceType} IN (?referenceTypes)";
+	/** NET-8943: services are not suggestable products, so an unfiltered query must never pick up SERVICE references. */
+	private static final String REF_QUERY_NOT_SERVICE = " AND {r.referenceType} NOT IN (?excludedReferenceType)";
+	private static final String REF_QUERY_PARAM_EXCLUDED_TYPE = "excludedReferenceType";
 	private static final String REF_QUERY_SUB = " AND NOT EXISTS ({{"
 			+ " SELECT 1 FROM {OrderEntry AS e2 LEFT JOIN Order AS o2 ON {e2.order}={o2.PK} } "
 			+ " WHERE {e2.product}={r.target} AND {o2.user}=?user }})";
@@ -80,6 +83,11 @@ public class DefaultSimpleSuggestionDao extends AbstractItemDao implements Simpl
 		{
 			builder.append(REF_QUERY_TYPES);
 			params.put(REF_QUERY_PARAM_TYPES, referenceTypes);
+		}
+		else
+		{
+			builder.append(REF_QUERY_NOT_SERVICE);
+			params.put(REF_QUERY_PARAM_EXCLUDED_TYPE, ProductReferenceTypeEnum.SERVICE);
 		}
 		builder.append(REF_QUERY_CATEGORY_ORDER);
 
@@ -115,6 +123,11 @@ public class DefaultSimpleSuggestionDao extends AbstractItemDao implements Simpl
 		{
 			builder.append(REF_QUERY_TYPES);
 			params.put(REF_QUERY_PARAM_TYPES, referenceTypes);
+		}
+		else
+		{
+			builder.append(REF_QUERY_NOT_SERVICE);
+			params.put(REF_QUERY_PARAM_EXCLUDED_TYPE, ProductReferenceTypeEnum.SERVICE);
 		}
 		builder.append(REF_QUERY_PRODUCT_GROUP);
 		builder.append(REF_QUERY_PRODUCT_ORDER);
@@ -155,6 +168,11 @@ public class DefaultSimpleSuggestionDao extends AbstractItemDao implements Simpl
 		{
 			builder.append(REF_QUERY_TYPE);
 			params.put(REF_QUERY_PARAM_TYPE, referenceType);
+		}
+		else
+		{
+			builder.append(REF_QUERY_NOT_SERVICE);
+			params.put(REF_QUERY_PARAM_EXCLUDED_TYPE, ProductReferenceTypeEnum.SERVICE);
 		}
 		builder.append(REF_QUERY_CATEGORY_ORDER);
 

@@ -1,0 +1,60 @@
+# -----------------------------------------------------------------------
+# NET-8943 - sample data for services sold with products (warranty extension, installation)
+#
+# Imported into electronicsProductCatalog:Staged; the catalog sync then publishes it to Online.
+# Service products carry NO product-specific price rows: their prices are group-only PriceRows on the
+# ProductPriceGroup <serviceCode>_<conditionCode> (spec 4.4). Stock is not modelled - service products
+# bypass the stock check in code (spec 5.5, option b).
+# -----------------------------------------------------------------------
+$productCatalog=electronicsProductCatalog
+$catalogVersion=catalogversion(catalog(id[default=$productCatalog]),version[default='Staged'])[unique=true,default='$productCatalog:Staged']
+$taxGroup=Europe1PriceFactory_PTG(code)[default=jp-vat-full]
+$supercategories=supercategories(code,catalogversion(catalog(id[default=$productCatalog]),version[default='Staged']))
+
+INSERT_UPDATE ServiceProduct;code[unique=true];$catalogVersion;name[lang=en];description[lang=en];unit(code)[default=pieces];approvalStatus(code)[default=approved];$taxGroup
+;SVC_INSTALLATION;;Installation;Professional installation of your product at your home.
+;SVC_WARRANTY_3Y;;3-year warranty extension;Extends the manufacturer's warranty to three years in total.
+
+# One product price group per service x condition
+INSERT_UPDATE ProductPriceGroup;code[unique=true]
+;SVC_INSTALLATION_LOW
+;SVC_INSTALLATION_MEDIUM
+;SVC_INSTALLATION_HIGH
+;SVC_WARRANTY_3Y_LOW
+;SVC_WARRANTY_3Y_MEDIUM
+;SVC_WARRANTY_3Y_HIGH
+
+# Group-only price rows (no product), one per group x currency
+INSERT_UPDATE PriceRow;pg(code)[unique=true];unit(code[unique=true,default=pieces]);currency(isocode)[unique=true];price;minqtd;unitFactor;net
+;SVC_INSTALLATION_LOW;pieces;USD;90.00;1;1;false
+;SVC_INSTALLATION_MEDIUM;pieces;USD;120.00;1;1;false
+;SVC_INSTALLATION_HIGH;pieces;USD;150.00;1;1;false
+;SVC_WARRANTY_3Y_LOW;pieces;USD;39.00;1;1;false
+;SVC_WARRANTY_3Y_MEDIUM;pieces;USD;79.00;1;1;false
+;SVC_WARRANTY_3Y_HIGH;pieces;USD;129.00;1;1;false
+;SVC_INSTALLATION_LOW;pieces;JPY;9000;1;1;false
+;SVC_INSTALLATION_MEDIUM;pieces;JPY;12000;1;1;false
+;SVC_INSTALLATION_HIGH;pieces;JPY;15000;1;1;false
+;SVC_WARRANTY_3Y_LOW;pieces;JPY;3900;1;1;false
+;SVC_WARRANTY_3Y_MEDIUM;pieces;JPY;7900;1;1;false
+;SVC_WARRANTY_3Y_HIGH;pieces;JPY;12900;1;1;false
+
+# Price conditions: one product per condition, plus a condition without references
+UPDATE Product;code[unique=true];$catalogVersion;servicePriceCondition(code)
+;107701;;LOW
+;266899;;MEDIUM
+;325234;;HIGH
+;479956;;MEDIUM
+;592506;;LOW
+
+# SERVICE references. 479956: warranty only. 592506: condition but no references. 805693: references but no condition.
+INSERT_UPDATE ProductReference;source(code,$catalogVersion)[unique=true];target(code,$catalogVersion)[unique=true];referenceType(code)[unique=true];active[default=true];preselected[default=false]
+;107701;SVC_INSTALLATION;SERVICE
+;107701;SVC_WARRANTY_3Y;SERVICE
+;266899;SVC_INSTALLATION;SERVICE
+;266899;SVC_WARRANTY_3Y;SERVICE
+;325234;SVC_INSTALLATION;SERVICE
+;325234;SVC_WARRANTY_3Y;SERVICE
+;479956;SVC_WARRANTY_3Y;SERVICE
+;805693;SVC_INSTALLATION;SERVICE
+;805693;SVC_WARRANTY_3Y;SERVICE

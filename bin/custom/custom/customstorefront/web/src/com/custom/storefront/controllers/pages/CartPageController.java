@@ -56,6 +56,9 @@ import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import javax.annotation.Resource;
+
+import com.custom.facades.productservices.ProductServiceFacade;
+import com.custom.productservices.exceptions.CartServiceSelectionException;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.validation.Valid;
@@ -130,6 +133,9 @@ public class CartPageController extends AbstractCartPageController
 
 	@Resource(name = "baseSiteService")
 	private BaseSiteService baseSiteService;
+
+	@Resource(name = "productServiceFacade")
+	private ProductServiceFacade productServiceFacade;
 
 	@Resource(name = "cartEntryActionFacade")
 	private CartEntryActionFacade cartEntryActionFacade;
@@ -353,6 +359,13 @@ public class CartPageController extends AbstractCartPageController
 				}
 			}
 		}
+		else if (productServiceFacade.isServiceEntry((int) entryNumber))
+		{
+			// NET-8943: a service's quantity follows its product line
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER,
+					"basket.page.services.quantity.locked");
+			return getCartPageRedirectUrl();
+		}
 		else if (getCartFacade().hasEntries())
 		{
 			try
@@ -377,6 +390,13 @@ public class CartPageController extends AbstractCartPageController
 	@Override
 	protected void prepareDataForPage(final Model model) throws CMSItemNotFoundException
 	{
+		// NET-8943: drop services that became invalid (reference/condition/price gone) before the cart data is built
+		for (final String serviceName : productServiceFacade.removeInvalidServicesFromCart())
+		{
+			GlobalMessages.addMessage(model, GlobalMessages.INFO_MESSAGES_HOLDER, "basket.page.services.removed",
+					new Object[] { serviceName });
+		}
+
 		super.prepareDataForPage(model);
 
 		if (!model.containsAttribute(VOUCHER_FORM))
@@ -655,6 +675,42 @@ public class CartPageController extends AbstractCartPageController
 		this.baseSiteService = baseSiteService;
 	}
 
+	@RequestMapping(value = "/entry/{entryNumber}/services/{serviceCode}/add", method = RequestMethod.POST)
+	public String addService(@PathVariable("entryNumber") final int entryNumber,
+			@PathVariable("serviceCode") final String serviceCode, final RedirectAttributes redirectModel)
+	{
+		try
+		{
+			productServiceFacade.addServiceToCart(entryNumber, serviceCode);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.services.added");
+		}
+		catch (final CartServiceSelectionException e)
+		{
+			LOG.warn("Could not add service " + Sanitizer.sanitize(serviceCode) + " to entry " + entryNumber + ": " + e.getMessage());
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER,
+					"basket.page.services.error");
+		}
+		return getCartPageRedirectUrl();
+	}
+
+	@RequestMapping(value = "/entry/{entryNumber}/services/{serviceCode}/remove", method = RequestMethod.POST)
+	public String removeService(@PathVariable("entryNumber") final int entryNumber,
+			@PathVariable("serviceCode") final String serviceCode, final RedirectAttributes redirectModel)
+	{
+		try
+		{
+			productServiceFacade.removeServiceFromCart(entryNumber, serviceCode);
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.services.removed.ok");
+		}
+		catch (final CartServiceSelectionException e)
+		{
+			LOG.warn("Could not remove service " + Sanitizer.sanitize(serviceCode) + " from entry " + entryNumber + ": " + e.getMessage());
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER,
+					"basket.page.services.error");
+		}
+		return getCartPageRedirectUrl();
+	}
+
 	@RequestMapping(value = "/entry/execute/" + ACTION_CODE_PATH_VARIABLE_PATTERN, method = RequestMethod.POST)
 	public String executeCartEntryAction(@PathVariable(value = "actionCode", required = true)
 	final String actionCode, final RedirectAttributes redirectModel, @RequestParam("entryNumbers")
@@ -724,8 +780,16 @@ public class CartPageController extends AbstractCartPageController
 
 		try
 		{
+			// NET-8943: the line's services are removed with it and are not saved (SavedForLaterEntry holds product and
+			// quantity only), so the shopper is told; read before the save removes the line
+			final boolean hadServices = hasSelectedServices(entryNumber);
 			savedForLaterFacade.saveCartEntryForLater(entryNumber);
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.CONF_MESSAGES_HOLDER, "basket.page.message.savedForLater");
+			if (hadServices)
+			{
+				GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.INFO_MESSAGES_HOLDER,
+						"basket.page.message.savedForLater.servicesRemoved");
+			}
 		}
 		// NoSuchElementException: entryNumber no longer matches a cart entry (stale page/tampered
 		// request). IllegalStateException: DefaultSavedForLaterFacade wraps a
@@ -783,6 +847,14 @@ public class CartPageController extends AbstractCartPageController
 			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER, "basket.page.error.removedSavedForLater");
 		}
 		return REDIRECT_CART_URL;
+	}
+
+	/** NET-8943: whether the cart line has services selected (service entries themselves are never cart lines). */
+	protected boolean hasSelectedServices(final long entryNumber)
+	{
+		return getCartFacade().getSessionCart().getEntries().stream()
+				.filter(entry -> entry.getEntryNumber() != null && entry.getEntryNumber().longValue() == entryNumber)
+				.anyMatch(entry -> entry.getSelectedServices() != null && !entry.getSelectedServices().isEmpty());
 	}
 
 	protected Optional<String> findProductCodeForEntry(final long entryNumber)
