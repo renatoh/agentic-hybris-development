@@ -584,3 +584,10 @@ Recorded after implementation and review, so the spec matches the code. None of 
 10. **Not in this installation:** the confirmation email lists no order lines at all (nothing to extend); Backoffice does not
     start with the current database (a leftover `SavedForLaterEntry` type from another ticket), so the editor tab is
     unverified; `custominitialdata`, `customfulfilmentprocess` and `order-process` are not active.
+11. **With NET-8941 (save for later), merged in PR #2 round 2.** Only product lines can be saved for later: the cart page
+    never shows service entries as rows, and `DefaultSavedForLaterFacade.findCartEntry` treats a service entry number like
+    an unknown one. Saving a product line removes it from the cart, which removes its services (same cascade as removing
+    the line); `SavedForLaterEntry` stores only product and quantity, so the services are **not** remembered and are not
+    back when the product is moved to the cart - the shopper ticks them again. Keeping them would need a model change
+    (open). Moving a product back into a cart that already holds the same product merges into that line and its services
+    follow the new quantity (§5.4).

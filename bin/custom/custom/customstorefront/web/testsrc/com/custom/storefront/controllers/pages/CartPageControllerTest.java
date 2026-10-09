@@ -49,6 +49,8 @@ import org.springframework.validation.support.BindingAwareModelMap;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import org.springframework.web.servlet.mvc.support.RedirectAttributesModelMap;
 
+import com.custom.facades.productservices.ProductServiceFacade;
+
 
 @UnitTest
 @RunWith(MockitoJUnitRunner.class)
@@ -107,6 +109,10 @@ public class CartPageControllerTest
 
 	@Mock
 	private CartData cart;
+
+	/** NET-8943: the quantity update first asks whether the entry is a service; unstubbed = false, i.e. a product line */
+	@Mock
+	private ProductServiceFacade productServiceFacade;
 
 
 	@Before

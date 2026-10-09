@@ -237,5 +237,7 @@
 		<property name="cartService" ref="cartService"/>
 		<property name="productFacade" ref="productFacade"/>
 		<property name="userService" ref="userService"/>
+		<!-- NET-8943: service entries cannot be saved for later -->
+		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
 	</bean>
 </beans>
