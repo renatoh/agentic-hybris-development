@@ -1,0 +1,253 @@
+/*
+ * Copyright (c) 2026 SAP SE or an SAP affiliate company. All rights reserved.
+ */
+package com.custom.savedforlater.service.impl;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+
+import de.hybris.bootstrap.annotations.UnitTest;
+import de.hybris.platform.commerceservices.order.CommerceCartModification;
+import de.hybris.platform.commerceservices.order.CommerceCartModificationException;
+import de.hybris.platform.commerceservices.order.CommerceCartModificationStatus;
+import de.hybris.platform.commerceservices.order.CommerceCartService;
+import de.hybris.platform.commerceservices.service.data.CommerceCartParameter;
+import de.hybris.platform.core.model.order.CartModel;
+import de.hybris.platform.core.model.product.ProductModel;
+import de.hybris.platform.core.model.user.CustomerModel;
+import de.hybris.platform.order.CartService;
+import de.hybris.platform.product.ProductService;
+import de.hybris.platform.servicelayer.exceptions.AmbiguousIdentifierException;
+import de.hybris.platform.servicelayer.exceptions.UnknownIdentifierException;
+import de.hybris.platform.servicelayer.model.ModelService;
+
+import java.util.List;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
+
+import com.custom.model.SavedForLaterEntryModel;
+
+
+/**
+ * Covers {@link DefaultSavedForLaterService#saveForLater}, {@code getSavedItems}, {@code
+ * moveToCart} and {@code removeSavedItem} (NET-8941 section 4/5.3, acceptance criteria 2, 5, 6, 8).
+ */
+@UnitTest
+@RunWith(MockitoJUnitRunner.class)
+public class DefaultSavedForLaterServiceTest
+{
+	@Mock
+	private ModelService modelService;
+	@Mock
+	private CartService cartService;
+	@Mock
+	private CommerceCartService commerceCartService;
+	@Mock
+	private ProductService productService;
+	@Mock
+	private CustomerModel customer;
+
+	private DefaultSavedForLaterService savedForLaterService;
+
+	@Before
+	public void setUp()
+	{
+		savedForLaterService = new DefaultSavedForLaterService();
+		savedForLaterService.setModelService(modelService);
+		savedForLaterService.setCartService(cartService);
+		savedForLaterService.setCommerceCartService(commerceCartService);
+		savedForLaterService.setProductService(productService);
+	}
+
+	private ProductModel product(final String code)
+	{
+		final ProductModel product = mock(ProductModel.class);
+		given(product.getCode()).willReturn(code);
+		return product;
+	}
+
+	private SavedForLaterEntryModel entry(final ProductModel product, final long quantity)
+	{
+		final SavedForLaterEntryModel entry = mock(SavedForLaterEntryModel.class);
+		given(entry.getProduct()).willReturn(product);
+		given(entry.getQuantity()).willReturn(quantity);
+		return entry;
+	}
+
+	@Test
+	public void shouldCreateANewEntryWhenSavingAProductWithNoExistingEntry()
+	{
+		given(customer.getSavedForLaterEntries()).willReturn(List.of());
+		final ProductModel product = product("P1");
+		final SavedForLaterEntryModel createdEntry = mock(SavedForLaterEntryModel.class);
+		given(modelService.create(SavedForLaterEntryModel.class)).willReturn(createdEntry);
+
+		savedForLaterService.saveForLater(customer, product, 3L);
+
+		verify(createdEntry).setCustomer(customer);
+		verify(createdEntry).setProduct(product);
+		verify(createdEntry).setQuantity(3L);
+		verify(modelService).save(createdEntry);
+		// customer.getSavedForLaterEntries() was already read (and cached on this exact instance)
+		// above by the merge-on-duplicate check, before the new entry was saved - without this
+		// refresh, a getSavedItems(customer) call later in the very same request (e.g. the
+		// anonymous-shopper post-login render) would still see the stale, pre-save collection.
+		verify(modelService).refresh(customer);
+	}
+
+	@Test
+	public void shouldIncrementTheExistingEntryRatherThanCreatingADuplicateWhenTheProductIsAlreadySaved()
+	{
+		final ProductModel product = product("P1");
+		final SavedForLaterEntryModel existingEntry = entry(product, 2L);
+		given(customer.getSavedForLaterEntries()).willReturn(List.of(existingEntry));
+
+		savedForLaterService.saveForLater(customer, product, 3L);
+
+		verify(existingEntry).setQuantity(5L);
+		verify(modelService).save(existingEntry);
+		verify(modelService, never()).create(SavedForLaterEntryModel.class);
+		verify(modelService).refresh(customer);
+	}
+
+	@Test
+	public void shouldOnlyReturnSavedEntriesWhoseProductResolvesInTheCurrentSessionCatalog()
+	{
+		final ProductModel visibleProduct = product("P1");
+		final ProductModel notVisibleProduct = product("P2");
+		final SavedForLaterEntryModel visibleEntry = entry(visibleProduct, 1L);
+		final SavedForLaterEntryModel notVisibleEntry = entry(notVisibleProduct, 1L);
+		given(customer.getSavedForLaterEntries()).willReturn(List.of(visibleEntry, notVisibleEntry));
+
+		given(productService.getProductForCode("P1")).willReturn(visibleProduct);
+		given(productService.getProductForCode("P2")).willThrow(new UnknownIdentifierException("not in this catalog"));
+
+		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer);
+
+		assertEquals(List.of(visibleEntry), result);
+	}
+
+	@Test
+	public void shouldTreatAnAmbiguousProductAsVisible()
+	{
+		final ProductModel product = product("P1");
+		final SavedForLaterEntryModel entry = entry(product, 1L);
+		given(customer.getSavedForLaterEntries()).willReturn(List.of(entry));
+		given(productService.getProductForCode("P1")).willThrow(new AmbiguousIdentifierException("more than one match"));
+
+		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer);
+
+		assertEquals(List.of(entry), result);
+	}
+
+	@Test
+	public void shouldReturnAnEmptyListWhenTheCustomerHasNoSavedEntries()
+	{
+		given(customer.getSavedForLaterEntries()).willReturn(null);
+
+		final List<SavedForLaterEntryModel> result = savedForLaterService.getSavedItems(customer);
+
+		assertTrue(result.isEmpty());
+	}
+
+	@Test
+	public void shouldAddTheEntryToTheSessionCartAndRemoveItFromTheSavedListWhenMovedToCart() throws CommerceCartModificationException
+	{
+		final CartModel sessionCart = mock(CartModel.class);
+		given(cartService.getSessionCart()).willReturn(sessionCart);
+		final ProductModel product = mock(ProductModel.class);
+		final SavedForLaterEntryModel entry = entry(product, 4L);
+		final CommerceCartModification success = modification(CommerceCartModificationStatus.SUCCESS, 4L);
+		given(commerceCartService.addToCart(any(CommerceCartParameter.class))).willReturn(success);
+
+		savedForLaterService.moveToCart(customer, entry);
+
+		final ArgumentCaptor<CommerceCartParameter> captor = ArgumentCaptor.forClass(CommerceCartParameter.class);
+		verify(commerceCartService).addToCart(captor.capture());
+		final CommerceCartParameter parameter = captor.getValue();
+		assertEquals(sessionCart, parameter.getCart());
+		assertEquals(product, parameter.getProduct());
+		assertEquals(4L, parameter.getQuantity());
+		verify(modelService).remove(entry);
+	}
+
+	@Test
+	public void shouldNotRemoveTheEntryWhenAddingToCartThrows() throws CommerceCartModificationException
+	{
+		given(cartService.getSessionCart()).willReturn(mock(CartModel.class));
+		final ProductModel product = mock(ProductModel.class);
+		final SavedForLaterEntryModel entry = entry(product, 1L);
+		doThrow(new CommerceCartModificationException("invalid quantity")).when(commerceCartService)
+				.addToCart(any(CommerceCartParameter.class));
+
+		try
+		{
+			savedForLaterService.moveToCart(customer, entry);
+			fail("expected IllegalStateException to propagate");
+		}
+		catch (final IllegalStateException expected)
+		{
+			// expected - the platform's checked CommerceCartModificationException is converted to
+			// unchecked, since every caller only ever needs to know "it failed" (PR review)
+		}
+
+		verify(modelService, never()).remove(entry);
+	}
+
+	@Test
+	public void shouldNotRemoveTheEntryWhenAddToCartReturnsANonSuccessStatusWithoutThrowing() throws CommerceCartModificationException
+	{
+		// DefaultCommerceAddToCartStrategy does not throw for an ordinary stock/availability
+		// failure - it returns a non-SUCCESS status with quantityAdded=0 instead. This is the
+		// actual shape of AC5's "now out of stock" scenario, not a thrown exception.
+		given(cartService.getSessionCart()).willReturn(mock(CartModel.class));
+		final ProductModel product = mock(ProductModel.class);
+		final SavedForLaterEntryModel entry = entry(product, 1L);
+		final CommerceCartModification outOfStock = modification(CommerceCartModificationStatus.NO_STOCK, 0L);
+		given(commerceCartService.addToCart(any(CommerceCartParameter.class))).willReturn(outOfStock);
+
+		try
+		{
+			savedForLaterService.moveToCart(customer, entry);
+			fail("expected IllegalStateException for a non-success status");
+		}
+		catch (final IllegalStateException expected)
+		{
+			// expected
+		}
+
+		verify(modelService, never()).remove(entry);
+	}
+
+	private CommerceCartModification modification(final String statusCode, final long quantityAdded)
+	{
+		final CommerceCartModification modification = mock(CommerceCartModification.class);
+		given(modification.getStatusCode()).willReturn(statusCode);
+		given(modification.getQuantityAdded()).willReturn(quantityAdded);
+		return modification;
+	}
+
+	@Test
+	public void shouldRemoveTheEntryWithoutTouchingTheCart() throws CommerceCartModificationException
+	{
+		final SavedForLaterEntryModel entry = mock(SavedForLaterEntryModel.class);
+
+		savedForLaterService.removeSavedItem(customer, entry);
+
+		verify(modelService).remove(entry);
+		verify(cartService, never()).getSessionCart();
+		verify(commerceCartService, never()).addToCart(any(CommerceCartParameter.class));
+	}
+}

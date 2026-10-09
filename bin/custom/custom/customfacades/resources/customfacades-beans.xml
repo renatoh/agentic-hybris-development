@@ -32,4 +32,15 @@
 		<!-- cart, checkout summary, order confirmation/history: the services bought with the line -->
 		<property name="selectedServices" type="java.util.List&lt;com.custom.facades.productservices.data.ProductServiceData>"/>
 	</bean>
+
+	<!--
+	   NET-8941: one row of the "Saved for later" section. Declared here rather than hand-written as
+	   a plain Java class - a facade DTO is always declared in -beans.xml and generated (see the
+	   sap-commerce-cloud skill).
+	-->
+	<bean class="com.custom.facades.savedforlater.data.SavedForLaterEntryData">
+		<property name="productCode" type="String"/>
+		<property name="product" type="de.hybris.platform.commercefacades.product.data.ProductData"/>
+		<property name="quantity" type="long"/>
+	</bean>
 </beans>
