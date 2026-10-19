@@ -15,10 +15,13 @@
             <div class="row">
                 <div class="col-sm-12 col-md-9">
                     <div class="row">
+                        <%-- NET-8942: the billing address comes from the card paymentInfo; advance payment has none --%>
+                        <c:if test="${not empty orderData.paymentInfo or empty orderData.paymentMode}">
                         <div class="col-sm-6 col-md-4 order-billing-address">
                             <order:billingAddressItem order="${orderData}"/>
                         </div>
-                        <c:if test="${not empty orderData.paymentInfo}">
+                        </c:if>
+                        <c:if test="${not empty orderData.paymentInfo or not empty orderData.paymentMode}">
                             <div class="col-sm-6 col-md-4 order-payment-data">
                                 <order:paymentDetailsItem order="${orderData}"/>
                             </div>

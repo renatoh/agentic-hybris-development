@@ -135,14 +135,27 @@ different set of payment modes later, the extension point is a `BaseStore2Paymen
   - sets a new `AdvancePaymentInfo`: owner = cart, user = cart user, `saved = false` (never appears
     as a saved payment method in My Account), billing address = a copy of the cart's delivery
     address (the platform copies the billing address to the order, §1.1);
+  - **(decided during implementation)** if the copied address has no email, it gets the customer's
+    email (`CustomerEmailResolutionService`, guests included). A card's billing address gets its
+    email from the payment form; a delivery address usually has none, and the billing address
+    becomes the order's payment address;
   - replaces an earlier payment info; an earlier `AdvancePaymentInfo` that is no longer referenced
     is removed (no orphans);
   - recalculates the cart if the payment mode change requires it.
 - Choosing a card after advance payment clears `paymentMode` and removes the `AdvancePaymentInfo`
   the same way. Card payments keep using no payment mode, as today.
-- With the cart's payment info set, `hasNoPaymentInfo()` is false and the step validator lets the
-  shopper on to the summary — the implementer verifies this against
-  `defaultPaymentMethodCheckoutValidator` and adjusts only if needed.
+- ~~With the cart's payment info set, `hasNoPaymentInfo()` is false~~ — **verified false against the
+  code, adjusted (decided 2026-10-19):** `hasNoPaymentInfo()` looks at `CartData.paymentInfo`, which
+  the platform fills only for a `CreditCardPaymentInfo` (`DefaultCheckoutFacade.getPaymentDetails`,
+  `AbstractOrderPopulator.addPaymentInformation`). So:
+  - the custom checkout facade (`DefaultAdvancePaymentCheckoutFacade`, alias
+    `acceleratorCheckoutFacade`) overrides `hasNoPaymentInfo()` to also accept an advance-payment
+    cart: an `AdvancePaymentInfo` **and** the cart's payment mode `advance`;
+  - the step validators and the summary controller ask `checkoutFlowFacade`, not
+    `acceleratorCheckoutFacade`. **`checkoutFlowFacade` is replaced too** (accepted by the user):
+    `AdvancePaymentAwareCheckoutFlowFacade` extends the platform's `SessionOverrideCheckoutFlowFacade`
+    and forwards `hasNoPaymentInfo`, `authorizePayment`, `setPaymentDetails` and
+    `setDefaultPaymentInfoForCheckout` to the custom checkout facade, so both beans answer the same.
 
 ### 5.2 Summary and placing the order
 
@@ -165,13 +178,26 @@ different set of payment modes later, the extension point is a `BaseStore2Paymen
 
 ### 5.3 Display
 
-- `PaymentInfoData` gets a way to tell the type apart (e.g. a `paymentType` field, values `CARD` /
-  `ADVANCE_PAYMENT`, filled by a populator) — declared in `customfacades-beans.xml`, not a
-  hand-written class. If the cart/order `paymentMode` is already available on `AbstractOrderData`,
-  its name may be used for the label instead; the implementer picks one and states which.
-- `multi-checkout:paymentInfo` (and the order details tag used in My Account) render
-  "Advance payment" instead of card fields for advance-payment orders. No bank details, no amount
-  or payment reference beyond what the pages already show (order number, totals).
+- **Decided 2026-10-19 (order-level approach).** There is no order-level `PaymentInfoData` in the
+  platform: `AbstractOrderData.paymentInfo` is a `CCPaymentInfoData`, filled only for credit cards.
+  A `paymentType` field on `CCPaymentInfoData` was tried and **rejected**. Instead:
+  - for advance payment `CartData`/`OrderData.paymentInfo` stays **empty**, as the platform does for
+    any non-card payment info;
+  - `AbstractOrderData` gets a field `paymentMode` (`PaymentModeData`: code, name, description),
+    declared in `customfacades-beans.xml` and filled by a populator (`PaymentModeOrderPopulator`) on
+    the cart and order converters (`cartConverter`, `extendedCartConverter` - the one the checkout
+    facades read the cart through - and `orderConverter`) from the cart's/order's `paymentMode`. Card carts/orders have no
+    payment mode, so the field stays empty for them;
+  - the label shown is the payment mode's `name` ("Advance payment").
+- `multi-checkout:paymentInfo` (summary) and the order details tag used for the order confirmation
+  and My Account render the payment block when `paymentInfo` **or** `paymentMode` is set: card
+  fields as before, otherwise the payment mode's name. The billing-address block on the order
+  details is shown only with a card `paymentInfo` (advance payment has none on the DTO). No bank
+  details, no amount or payment reference beyond what the pages already show (order number, totals).
+- Guest order confirmation: `CheckoutController` took the guest's email from
+  `paymentInfo.billingAddress.email`, which would fail with an empty `paymentInfo`. Without a card
+  payment info it now takes the email from the guest's uid (`<guid>|<email>`), the format the same
+  controller already parses.
 - New texts English only, in `base_en.properties`.
 
 ### 5.4 Payment cost

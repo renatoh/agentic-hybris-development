@@ -23,6 +23,10 @@
             </div>
             <multiCheckout:checkoutSteps checkoutSteps="${checkoutSteps}" progressBarId="${progressBarId}">
                 <jsp:body>
+                    <%-- NET-8942: credit card / advance payment choice; renders nothing if advance payment is not offered --%>
+                    <multiCheckout:paymentTypeChoice advancePaymentMode="${advancePaymentMode}" advancePaymentSelected="${advancePaymentSelected}"/>
+
+                    <div class="js-card-payment-section">
                     <ycommerce:testId code="checkoutStepThree">
                         <div class="checkout-paymentmethod">
                             <div class="checkout-indent">
@@ -172,6 +176,7 @@
                             </div>
                         </c:if>
                     </ycommerce:testId>
+                    </div>
                </jsp:body>
 
             </multiCheckout:checkoutSteps>
