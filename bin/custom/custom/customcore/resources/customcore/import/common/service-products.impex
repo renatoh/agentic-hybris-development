@@ -1,0 +1,9 @@
+# -----------------------------------------------------------------------
+# NET-8943 - service products (warranty extension, installation) are never standalone products.
+# Storefront users cannot look them up through the product service: no product page, quick view or
+# add-to-cart by code (all of them resolve the product with a FlexibleSearch, which this restriction
+# empties). Cart entries, prices and orders reach the service product through relations, not search,
+# so they are unaffected. Employees and system users are not in customergroup.
+# -----------------------------------------------------------------------
+INSERT_UPDATE SearchRestriction;code[unique=true];principal(uid)[unique=true];query;restrictedType(code)[unique=true];active;generate
+;Frontend_ServiceProduct;customergroup;"{item:pk} IS NULL";ServiceProduct;true;true

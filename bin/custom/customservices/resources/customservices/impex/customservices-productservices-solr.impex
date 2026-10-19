@@ -1,0 +1,50 @@
+# -----------------------------------------------------------------------
+# NET-8943 - keep service products out of the electronics store's Solr indexes (spec 4.2)
+#
+# Service products are never standalone products, but the store's indexer queries select every Product, subtypes
+# included. This file re-imports those SolrIndexerQuery rows with the query text copied from SAP's ImpEx and ONLY an
+# exclusion condition added:
+#   - electronics-fullQuery / electronics-updateQuery (electronicsIndex, the index the electronics site searches):
+#       electronicsstore/resources/electronicsstore/import/coredata/stores/electronics/solr.impex
+#   (the electronics-visibility-* queries are in customservices-productservices-solr-visibility.impex)
+# On an SAP upgrade, compare against SAP's current version of those files and re-apply the condition.
+#
+# The condition filters on the row's own type, a single-row lookup by the unique type code:
+#   - full queries:   AND {itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})
+#   - update queries: tbl has no item type, so AND {p:itemtype} <> (...) is added inside each union part, where the
+#                     alias p exists. Where a part's WHERE is an OR, it is wrapped in parentheses so the condition
+#                     applies to the whole part (that is the only other change to SAP's text).
+# Note: <> only excludes the exact type ServiceProduct. A future subtype of ServiceProduct WOULD be indexed again.
+# Do not use {Product!} instead: it would also drop ElectronicsColorVariantProduct and every other Product subtype.
+#
+# Imported by ProductServicesDataImportEventListener right after the store's core data (which re-creates these queries)
+# and after its sample data, and by ProductServicesSystemSetup.createProjectData when the catalog already exists.
+# For our own store later, put the condition directly into custominitialdata's solr.impex instead.
+# -----------------------------------------------------------------------
+
+INSERT_UPDATE SolrIndexerQuery;identifier[unique=true];query
+;electronics-fullQuery;"
+SELECT {PK} FROM {Product} WHERE ({varianttype} IS NULL OR {varianttype} NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) )
+							AND {code} NOT IN( {{ SELECT {code} FROM {GenericVariantProduct} }})
+							AND {itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})"
+
+;electronics-updateQuery;"
+SELECT DISTINCT tbl.pk, tbl.code FROM (
+	{{
+		SELECT DISTINCT {p:PK} AS pk, {p:code} AS code, {p:varianttype} AS varianttype
+		FROM {Product AS p LEFT JOIN CustomerReview AS cr ON {cr:product}={p:PK} }
+		WHERE ({p:modifiedtime} >= ?lastIndexTime OR {cr:modifiedtime} >= ?lastIndexTime)
+			AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})
+	}}
+	UNION
+	{{
+		SELECT {p:PK}  AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {Product AS p} WHERE {p:code} IN (
+			{{
+				SELECT DISTINCT {sl:productCode} FROM {StockLevel AS sl} WHERE {sl:modifiedtime} >= ?lastIndexTime
+			}}
+		)
+			AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})
+	}}
+) tbl WHERE (tbl.varianttype IS NULL OR tbl.varianttype NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) )
+      AND tbl.code NOT IN({{ SELECT {code} FROM {GenericVariantProduct} }}) ORDER BY tbl.code
+"

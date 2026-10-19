@@ -24,6 +24,7 @@ import org.springframework.beans.factory.annotation.Required;
 import com.custom.model.SavedForLaterEntryModel;
 import com.custom.facades.savedforlater.SavedForLaterFacade;
 import com.custom.facades.savedforlater.data.SavedForLaterEntryData;
+import com.custom.productservices.service.ServiceEntryGroupService;
 import com.custom.savedforlater.service.SavedForLaterService;
 
 
@@ -36,6 +37,7 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 	private CartService cartService;
 	private ProductFacade productFacade;
 	private UserService userService;
+	private ServiceEntryGroupService serviceEntryGroupService;
 
 	@Override
 	public void saveCartEntryForLater(final long entryNumber)
@@ -77,11 +79,16 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 		getSavedForLaterService().removeSavedItem(getCurrentCustomer(), entry);
 	}
 
+	/**
+	 * NET-8943: a service entry (warranty, installation) is not a cart line of its own - it belongs to its product line and
+	 * is removed with it - so it cannot be saved for later; treated like an unknown entry number.
+	 */
 	protected AbstractOrderEntryModel findCartEntry(final long entryNumber)
 	{
 		final CartModel cart = getCartService().getSessionCart();
-		return cart.getEntries().stream().filter(entry -> entry.getEntryNumber() == entryNumber).findFirst()
-				.orElseThrow(() -> new NoSuchElementException("No cart entry with number " + entryNumber));
+		return cart.getEntries().stream().filter(entry -> entry.getEntryNumber() == entryNumber)
+				.filter(entry -> !getServiceEntryGroupService().isServiceEntry(entry)).findFirst()
+				.orElseThrow(() -> new NoSuchElementException("No product cart entry with number " + entryNumber));
 	}
 
 	protected SavedForLaterEntryModel findSavedEntry(final String productCode)
@@ -158,5 +165,16 @@ public class DefaultSavedForLaterFacade implements SavedForLaterFacade
 	public void setUserService(final UserService userService)
 	{
 		this.userService = userService;
+	}
+
+	protected ServiceEntryGroupService getServiceEntryGroupService()
+	{
+		return serviceEntryGroupService;
+	}
+
+	@Required
+	public void setServiceEntryGroupService(final ServiceEntryGroupService serviceEntryGroupService)
+	{
+		this.serviceEntryGroupService = serviceEntryGroupService;
 	}
 }

@@ -1,0 +1,18 @@
+# -----------------------------------------------------------------------
+# NET-8943 - keep service products out of the electronics store's VISIBILITY Solr index (spec 4.2)
+#
+# Same condition and rules as customservices-productservices-solr.impex (read its header), for the two queries of
+# electronicsVisibilityIndex, copied from electronicsstore/resources/impex/projectdata-productVisibilitySolr.impex.
+# That index is not assigned to any site; the storefront searches electronicsIndex.
+#
+# Kept apart because SAP creates these rows with the platform's automatic projectdata-*.impex import, which runs at the
+# end of electronicsstore's project data - after the store's data-import events. So they cannot be fixed from the event
+# listener: only ProductServicesSystemSetup.createProjectData imports this file (when customservices project data runs on
+# a system that already has the store). On a fresh ant initialize, and after any later run of electronicsstore project
+# data, these two queries are SAP's original text again until customservices project data is re-run.
+# -----------------------------------------------------------------------
+
+INSERT_UPDATE SolrIndexerQuery;identifier[unique=true];query
+;electronics-visibility-fullQuery;"SELECT {PK} FROM {Product} WHERE ({varianttype} IS NULL OR {varianttype} NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) ) AND {code} NOT IN( {{ SELECT {code} FROM {GenericVariantProduct} }}) AND {itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})"
+
+;electronics-visibility-updateQuery;"SELECT DISTINCT tbl.pk, tbl.code FROM ({{ SELECT DISTINCT {p:PK} AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {Product AS p LEFT JOIN CustomerReview AS cr ON {cr:product}={p:PK} LEFT JOIN CatalogVersion AS cv ON {cv:PK}={p:catalogversion}} WHERE ({p:modifiedtime} >= ?lastIndexTime OR {cr:modifiedtime} >= ?lastIndexTime OR {cv:modifiedtime} >= ?lastIndexTime) AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }}) }} UNION {{ SELECT {p:PK}  AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {Product AS p} WHERE {p:code} IN ({{ SELECT DISTINCT {sl:productCode} FROM {StockLevel AS sl} WHERE {sl:modifiedtime} >= ?lastIndexTime }}) AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})}} UNION {{ SELECT {p:PK}  AS pk, {p:code} AS code, {p:varianttype} AS varianttype FROM {CategoryProductRelation AS cpr LEFT JOIN Product AS p ON {cpr:target}={p:PK}} WHERE {cpr:source} IN ({{ SELECT DISTINCT {c:pk} FROM {Category AS c} WHERE {c:modifiedtime} >= ?lastIndexTime }}) AND {p:itemtype} <> ({{ SELECT {PK} FROM {ComposedType} WHERE {code} = 'ServiceProduct' }})}}) tbl WHERE (tbl.varianttype IS NULL OR tbl.varianttype NOT IN ( {{ SELECT {PK} FROM {varianttype} WHERE {code} = 'ElectronicsColorVariantProduct'}}) ) AND tbl.code NOT IN({{ SELECT {code} FROM {GenericVariantProduct} }}) ORDER BY tbl.code"

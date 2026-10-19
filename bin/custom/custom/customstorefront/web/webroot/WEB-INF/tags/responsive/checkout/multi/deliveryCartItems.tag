@@ -2,6 +2,7 @@
 <%@ attribute name="cartData" required="true" type="de.hybris.platform.commercefacades.order.data.CartData" %>
 <%@ attribute name="showDeliveryAddress" required="true" type="java.lang.Boolean" %>
 <%@ attribute name="showPotentialPromotions" required="false" type="java.lang.Boolean" %>
+<%@ taglib prefix="order" tagdir="/WEB-INF/tags/responsive/order" %>
 <%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core"%>
 <%@ taglib prefix="spring" uri="http://www.springframework.org/tags" %>
 <%@ taglib prefix="fn" uri="http://java.sun.com/jsp/jstl/functions" %>
@@ -74,6 +75,7 @@
 			<div class="price"><format:price priceData="${entry.totalPrice}" displayFreeForZero="true"/></div>
 			<div class="details">
 				<div class="name"><a href="${fn:escapeXml(productUrl)}">${fn:escapeXml(entry.product.name)}</a></div>
+				<order:entryServices entry="${entry}"/>
 				<div>
                     <span class="label-spacing"><spring:theme code="order.itemPrice" />:</span>
 					<c:if test="${entry.product.multidimensional}">

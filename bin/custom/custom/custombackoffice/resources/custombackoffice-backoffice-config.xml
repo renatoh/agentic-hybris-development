@@ -3,7 +3,8 @@
  Copyright (c) 2019 SAP SE or an SAP affiliate company. All rights reserved.
 -->
 <config xmlns="http://www.hybris.com/cockpit/config"
-	xmlns:na="http://www.hybris.com/cockpitng/config/notifications">
+	xmlns:na="http://www.hybris.com/cockpitng/config/notifications"
+	xmlns:editorArea="http://www.hybris.com/cockpitng/component/editorArea">
 
 	<context merge-by="module" component="editorareaactions" type="Consignment">
 		<y:actions xmlns:y="http://www.hybris.com/cockpit/config/hybris">
@@ -13,6 +14,21 @@
 			</y:group>
 		</y:actions>
     </context>
+
+	<!--
+	   NET-8943: services sold with products. The price condition is edited on the product; SERVICE references use the
+	   product's existing references section; service prices are standard price rows filtered by product price group.
+	   ServiceProduct inherits this through Product.
+	-->
+	<context merge-by="module" type="Product" component="editorArea">
+		<editorArea:editorArea>
+			<editorArea:tab name="hmc.tab.product.services">
+				<editorArea:section name="hmc.section.product.services">
+					<editorArea:attribute qualifier="servicePriceCondition"/>
+				</editorArea:section>
+			</editorArea:tab>
+		</editorArea:editorArea>
+	</context>
 
 	<!-- Notification Area-->
 	<context component="notification-area">

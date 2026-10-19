@@ -10,6 +10,7 @@ import de.hybris.platform.order.CartService;
 import de.hybris.platform.servicelayer.session.SessionService;
 import de.hybris.platform.servicelayer.user.UserService;
 import de.hybris.platform.site.BaseSiteService;
+import com.custom.productservices.exceptions.ServicePriceNotFoundException;
 import com.custom.storefront.security.cookie.CartRestoreCookieGenerator;
 
 import java.io.IOException;
@@ -75,6 +76,13 @@ public class CartRestorationFilter extends OncePerRequestFilter
 				}
                 getSessionService().setAttribute(WebConstants.CART_RESTORATION, WebConstants.CART_RESTORATION_ERROR_STATUS);
             }
+            catch (final ServicePriceNotFoundException e)
+            {
+                // NET-8943: restoring an expired cart re-adds every entry without the calculation hooks, so an orphaned
+                // service entry reaches the price hook and cannot be priced; the page the shopper asked for must still load
+                LOG.warn("Cart restoration failed: a service entry could not be priced", e);
+                getSessionService().setAttribute(WebConstants.CART_RESTORATION, WebConstants.CART_RESTORATION_ERROR_STATUS);
+            }
         }
 	}
 
@@ -128,6 +136,13 @@ public class CartRestorationFilter extends OncePerRequestFilter
 				{
 					LOG.debug(e);
 				}
+                getSessionService().setAttribute(WebConstants.CART_RESTORATION_ERROR_STATUS,
+                        WebConstants.CART_RESTORATION_ERROR_STATUS);
+            }
+            catch (final ServicePriceNotFoundException e)
+            {
+                // NET-8943: see restoreCartWithNoCode
+                LOG.warn("Cart restoration failed: a service entry could not be priced", e);
                 getSessionService().setAttribute(WebConstants.CART_RESTORATION_ERROR_STATUS,
                         WebConstants.CART_RESTORATION_ERROR_STATUS);
             }

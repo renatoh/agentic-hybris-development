@@ -59,6 +59,7 @@
                 ${fn:escapeXml(orderEntry.product.code)}
             </ycommerce:testId>
         </div>
+        <order:entryServices entry="${orderEntry}"/>
 
         <%-- availability --%>
         <c:if test="${varShowStock}">
