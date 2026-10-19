@@ -93,11 +93,18 @@ public class DefaultAdvancePaymentCheckoutFacade extends DefaultAcceleratorCheck
 		parameter.setPaymentInfo(paymentInfo);
 		final boolean paymentInfoSet = getCommerceCheckoutService().setPaymentInfo(parameter);
 
-		if (paymentInfoSet && previousPaymentInfo instanceof AdvancePaymentInfoModel)
+		if (!paymentInfoSet)
+		{
+			// leave the cart as it was: drop the new payment info and the unsaved payment mode change
+			removeAdvancePaymentInfo(paymentInfo);
+			getModelService().refresh(cart);
+			return false;
+		}
+		if (previousPaymentInfo instanceof AdvancePaymentInfoModel)
 		{
 			removeAdvancePaymentInfo((AdvancePaymentInfoModel) previousPaymentInfo);
 		}
-		return paymentInfoSet;
+		return true;
 	}
 
 	/**
@@ -134,7 +141,7 @@ public class DefaultAdvancePaymentCheckoutFacade extends DefaultAcceleratorCheck
 	{
 		final AdvancePaymentInfoModel previousAdvancePaymentInfo = getAdvancePaymentInfo(getCart());
 		final boolean paymentInfoSet = super.setPaymentDetails(paymentInfoId);
-		if (paymentInfoSet && previousAdvancePaymentInfo != null)
+		if (paymentInfoSet)
 		{
 			clearAdvancePayment(previousAdvancePaymentInfo);
 		}
@@ -146,7 +153,7 @@ public class DefaultAdvancePaymentCheckoutFacade extends DefaultAcceleratorCheck
 	{
 		final AdvancePaymentInfoModel previousAdvancePaymentInfo = getAdvancePaymentInfo(getCart());
 		final boolean paymentInfoSet = super.setDefaultPaymentInfoForCheckout();
-		if (paymentInfoSet && previousAdvancePaymentInfo != null)
+		if (paymentInfoSet)
 		{
 			clearAdvancePayment(previousAdvancePaymentInfo);
 		}
@@ -177,6 +184,18 @@ public class DefaultAdvancePaymentCheckoutFacade extends DefaultAcceleratorCheck
 		// never listed as a saved payment method in My Account
 		paymentInfo.setSaved(false);
 
+		final AddressModel billingAddress = createBillingAddress(cart, paymentInfo);
+		paymentInfo.setBillingAddress(billingAddress);
+
+		getModelService().saveAll(billingAddress, paymentInfo);
+		return paymentInfo;
+	}
+
+	/**
+	 * @return a new, unsaved copy of the cart's delivery address, owned by the given payment info
+	 */
+	protected AddressModel createBillingAddress(final CartModel cart, final AdvancePaymentInfoModel paymentInfo)
+	{
 		final AddressModel billingAddress = getAddressService().cloneAddressForOwner(cart.getDeliveryAddress(), paymentInfo);
 		billingAddress.setBillingAddress(Boolean.TRUE);
 		billingAddress.setShippingAddress(Boolean.FALSE);
@@ -187,27 +206,54 @@ public class DefaultAdvancePaymentCheckoutFacade extends DefaultAcceleratorCheck
 		{
 			billingAddress.setEmail(getCustomerEmailResolutionService().getEmailForCustomer((CustomerModel) cart.getUser()));
 		}
-		paymentInfo.setBillingAddress(billingAddress);
-
-		getModelService().saveAll(billingAddress, paymentInfo);
-		return paymentInfo;
+		return billingAddress;
 	}
 
 	/**
-	 * After a card replaced advance payment on the cart: card payments carry no payment mode, and the
-	 * old {@code AdvancePaymentInfo} is no longer referenced.
+	 * After a card was set on the cart: card payments carry no payment mode, and a previous {@code AdvancePaymentInfo}
+	 * is no longer referenced. The mode is checked on its own, not only together with a previous
+	 * {@code AdvancePaymentInfo} - the guest cart clean can drop the payment info and leave the mode behind.
+	 *
+	 * @param previousAdvancePaymentInfo
+	 *           the cart's advance payment info before the card was set, or {@code null}
 	 */
 	protected void clearAdvancePayment(final AdvancePaymentInfoModel previousAdvancePaymentInfo)
 	{
 		final CartModel cart = getCart();
-		if (cart != null)
+		if (cart != null && cart.getPaymentMode() != null && ADVANCE_PAYMENT_MODE_CODE.equals(cart.getPaymentMode().getCode()))
 		{
 			cart.setPaymentMode(null);
 			cart.setCalculated(Boolean.FALSE);
 			getModelService().save(cart);
 			getCommerceCheckoutService().calculateCart(createCommerceCheckoutParameter(cart, true));
 		}
-		removeAdvancePaymentInfo(previousAdvancePaymentInfo);
+		if (previousAdvancePaymentInfo != null)
+		{
+			removeAdvancePaymentInfo(previousAdvancePaymentInfo);
+		}
+	}
+
+	/**
+	 * The billing address of advance payment is a copy of the delivery address taken when advance payment was chosen.
+	 * The shopper can still change the delivery address afterwards and jump to the summary via the progress bar, so it
+	 * is copied again right before the order is placed (the order takes it over as its payment address).
+	 */
+	@Override
+	protected void beforePlaceOrder(final CartModel cartModel)
+	{
+		super.beforePlaceOrder(cartModel);
+		final AdvancePaymentInfoModel advancePaymentInfo = getAdvancePaymentInfo(cartModel);
+		if (advancePaymentInfo != null && cartModel.getDeliveryAddress() != null)
+		{
+			final AddressModel previousBillingAddress = advancePaymentInfo.getBillingAddress();
+			final AddressModel billingAddress = createBillingAddress(cartModel, advancePaymentInfo);
+			advancePaymentInfo.setBillingAddress(billingAddress);
+			getModelService().saveAll(billingAddress, advancePaymentInfo);
+			if (previousBillingAddress != null)
+			{
+				getModelService().remove(previousBillingAddress);
+			}
+		}
 	}
 
 	protected void removeAdvancePaymentInfo(final AdvancePaymentInfoModel paymentInfo)

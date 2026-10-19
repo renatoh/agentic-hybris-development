@@ -322,6 +322,22 @@ public class DefaultAdvancePaymentCheckoutFacadeTest
 	}
 
 	@Test
+	public void shouldRollBackTheNewAdvancePaymentInfoWhenSettingThePaymentInfoFails()
+	{
+		given(Boolean.valueOf(commerceCheckoutService.setPaymentInfo(any(CommerceCheckoutParameter.class))))
+				.willReturn(Boolean.FALSE);
+
+		assertFalse(facade.setAdvancePayment());
+
+		// no orphan: the new payment info and its billing address are removed again ...
+		final List<Object> removed = argumentsOf(modelService, "remove", "removeAll");
+		assertContainsInstance(removed, createdPaymentInfos.get(0));
+		assertContainsInstance(removed, clonedAddresses.get(0));
+		// ... and the unsaved payment mode change on the cart is discarded
+		verify(modelService).refresh(cart);
+	}
+
+	@Test
 	public void shouldGiveEachAdvancePaymentInfoAUniqueCode()
 	{
 		facade.setAdvancePayment();
@@ -651,8 +667,65 @@ public class DefaultAdvancePaymentCheckoutFacadeTest
 		assertTrue(facade.setPaymentDetails(CARD_PAYMENT_INFO_ID));
 
 		assertNull(cart.getPaymentMode());
-		assertTrue("no payment info may be removed when switching between cards",
-				argumentsOf(modelService, "remove", "removeAll").isEmpty());
+		assertCardSwitchLeftTheCartAlone();
+	}
+
+	@Test
+	public void shouldNotTouchTheCartWhenApplyingTheDefaultCardOverACard()
+	{
+		cart.setPaymentInfo(new CreditCardPaymentInfoModel());
+		final CreditCardPaymentInfoModel defaultCard = new CreditCardPaymentInfoModel();
+		defaultCard.setSaved(true);
+		customer.setDefaultPaymentInfo(defaultCard);
+
+		assertTrue(facade.setDefaultPaymentInfoForCheckout());
+
+		assertNull(cart.getPaymentMode());
+		assertCardSwitchLeftTheCartAlone();
+	}
+
+	@Test
+	public void shouldClearALeftoverAdvancePaymentModeWhenASavedCardIsChosen()
+	{
+		// guest cart clean dropped the payment info but (before the fix) left the payment mode behind
+		cart.setPaymentInfo(null);
+		cart.setPaymentMode(advanceMode);
+		given(customerAccountService.getCreditCardPaymentInfoForCode(customer, CARD_PAYMENT_INFO_ID))
+				.willReturn(new CreditCardPaymentInfoModel());
+
+		assertTrue(facade.setPaymentDetails(CARD_PAYMENT_INFO_ID));
+
+		assertAdvancePaymentModeCleared();
+		assertTrue("there is no advance payment info to remove", argumentsOf(modelService, "remove", "removeAll").isEmpty());
+	}
+
+	@Test
+	public void shouldClearALeftoverAdvancePaymentModeWhenTheDefaultCardIsApplied()
+	{
+		cart.setPaymentInfo(null);
+		cart.setPaymentMode(advanceMode);
+		final CreditCardPaymentInfoModel defaultCard = new CreditCardPaymentInfoModel();
+		defaultCard.setSaved(true);
+		customer.setDefaultPaymentInfo(defaultCard);
+
+		assertTrue(facade.setDefaultPaymentInfoForCheckout());
+
+		assertAdvancePaymentModeCleared();
+		assertTrue("there is no advance payment info to remove", argumentsOf(modelService, "remove", "removeAll").isEmpty());
+	}
+
+	@Test
+	public void shouldKeepAnotherPaymentModeWhenACardIsChosen()
+	{
+		final PaymentModeModel otherMode = otherPaymentMode();
+		cart.setPaymentMode(otherMode);
+		given(customerAccountService.getCreditCardPaymentInfoForCode(customer, CARD_PAYMENT_INFO_ID))
+				.willReturn(new CreditCardPaymentInfoModel());
+
+		assertTrue(facade.setPaymentDetails(CARD_PAYMENT_INFO_ID));
+
+		assertSame(otherMode, cart.getPaymentMode());
+		assertCardSwitchLeftTheCartAlone();
 	}
 
 	@Test
@@ -679,7 +752,99 @@ public class DefaultAdvancePaymentCheckoutFacadeTest
 		assertCartUnchanged(previousInfo, advanceMode);
 	}
 
+	// --- beforePlaceOrder: billing address follows a changed delivery address (AC 4) ---
+
+	@Test
+	public void shouldCopyTheCurrentDeliveryAddressAsBillingAddressBeforePlacingTheOrder()
+	{
+		final AdvancePaymentInfoModel info = givenAdvancePaymentOnTheCart();
+		final AddressModel previousBillingAddress = info.getBillingAddress();
+		final AddressModel changedDeliveryAddress = new AddressModel();
+		changedDeliveryAddress.setStreetname("Changed street");
+		cart.setDeliveryAddress(changedDeliveryAddress);
+
+		facade.beforePlaceOrder(cart);
+
+		verify(addressService).cloneAddressForOwner(changedDeliveryAddress, info);
+		final AddressModel billingAddress = info.getBillingAddress();
+		assertSame(clonedAddresses.get(0), billingAddress);
+		assertEquals("Changed street", billingAddress.getStreetname());
+		assertEquals(Boolean.TRUE, billingAddress.getBillingAddress());
+		assertEquals(Boolean.FALSE, billingAddress.getShippingAddress());
+		assertEquals(Boolean.FALSE, billingAddress.getVisibleInAddressBook());
+		assertEquals("guest order confirmation reads the billing email", "shopper@example.com", billingAddress.getEmail());
+
+		final List<Object> saved = argumentsOf(modelService, "save", "saveAll");
+		assertContainsInstance(saved, billingAddress);
+		assertContainsInstance(saved, info);
+
+		final List<Object> removed = argumentsOf(modelService, "remove", "removeAll");
+		assertContainsInstance(removed, previousBillingAddress);
+		assertNotContainsInstance(removed, billingAddress);
+		assertNotContainsInstance(removed, info);
+	}
+
+	@Test
+	public void shouldNotRemoveAnythingBeforePlacingTheOrderWhenThereWasNoBillingAddress()
+	{
+		final AdvancePaymentInfoModel info = givenAdvancePaymentOnTheCart();
+		info.setBillingAddress(null);
+
+		facade.beforePlaceOrder(cart);
+
+		assertSame(clonedAddresses.get(0), info.getBillingAddress());
+		assertTrue(argumentsOf(modelService, "remove", "removeAll").isEmpty());
+	}
+
+	@Test
+	public void shouldNotTouchACardBeforePlacingTheOrder()
+	{
+		final AddressModel cardBillingAddress = new AddressModel();
+		final CreditCardPaymentInfoModel card = new CreditCardPaymentInfoModel();
+		card.setBillingAddress(cardBillingAddress);
+		cart.setPaymentInfo(card);
+
+		facade.beforePlaceOrder(cart);
+
+		assertSame(cardBillingAddress, card.getBillingAddress());
+		assertNothingPersisted();
+		verify(addressService, never()).cloneAddressForOwner(any(), any());
+	}
+
+	@Test
+	public void shouldNotTouchTheBillingAddressBeforePlacingTheOrderWithoutADeliveryAddress()
+	{
+		final AdvancePaymentInfoModel info = givenAdvancePaymentOnTheCart();
+		final AddressModel billingAddress = info.getBillingAddress();
+		cart.setDeliveryAddress(null);
+
+		facade.beforePlaceOrder(cart);
+
+		assertSame(billingAddress, info.getBillingAddress());
+		assertNothingPersisted();
+		verify(addressService, never()).cloneAddressForOwner(any(), any());
+	}
+
 	// --- helpers ---
+
+	private void assertAdvancePaymentModeCleared()
+	{
+		assertNull("card payments carry no payment mode", cart.getPaymentMode());
+		assertEquals(Boolean.FALSE, cart.getCalculated());
+		assertContainsInstance(argumentsOf(modelService, "save", "saveAll"), cart);
+		final ArgumentCaptor<CommerceCheckoutParameter> parameter = ArgumentCaptor.forClass(CommerceCheckoutParameter.class);
+		verify(commerceCheckoutService).calculateCart(parameter.capture());
+		assertSame(cart, parameter.getValue().getCart());
+	}
+
+	/** Card to card with no advance payment mode: the facade adds nothing on top of the platform. */
+	private void assertCardSwitchLeftTheCartAlone()
+	{
+		assertEquals(Boolean.TRUE, cart.getCalculated());
+		assertTrue("nothing may be saved", argumentsOf(modelService, "save", "saveAll").isEmpty());
+		assertTrue("nothing may be removed", argumentsOf(modelService, "remove", "removeAll").isEmpty());
+		verify(commerceCheckoutService, never()).calculateCart(any(CommerceCheckoutParameter.class));
+	}
 
 	/**
 	 * The inherited getDeliveryAddress() resolves the delivery address by PK, which a detached model

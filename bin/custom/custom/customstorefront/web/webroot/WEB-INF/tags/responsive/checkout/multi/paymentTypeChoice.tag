@@ -58,6 +58,10 @@
 			for (var i = 0; i < radios.length; i++) {
 				radios[i].addEventListener('change', showSelectedPaymentType);
 			}
+			// one advance-payment request per click - a double submit would race on the cart's payment info
+			document.getElementById('advancePaymentForm').addEventListener('submit', function () {
+				this.querySelector('button[type="submit"]').disabled = true;
+			});
 			if (document.readyState === 'loading') {
 				document.addEventListener('DOMContentLoaded', showSelectedPaymentType);
 			} else {

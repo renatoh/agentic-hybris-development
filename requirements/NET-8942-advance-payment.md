@@ -144,6 +144,21 @@ different set of payment modes later, the extension point is a `BaseStore2Paymen
   - recalculates the cart if the payment mode change requires it.
 - Choosing a card after advance payment clears `paymentMode` and removes the `AdvancePaymentInfo`
   the same way. Card payments keep using no payment mode, as today.
+  - **(review finding, fixed)** The mode is cleared on *every* successful card selection whenever it
+    is `advance`, not only when the previous payment info was an `AdvancePaymentInfo`: the guest
+    checkout cart clean (`DefaultGuestCheckoutCartCleanStrategy`, run when a guest leaves the
+    checkout) drops the payment info. That clean now also clears `paymentMode` and removes a dropped
+    `AdvancePaymentInfo` with its billing address.
+- **(review finding, fixed)** The billing address is a copy of the delivery address taken when
+  advance payment is chosen. Because the shopper can change the delivery address afterwards and
+  jump to the summary via the progress bar, it is copied again right before the order is placed
+  (`beforePlaceOrder`), so the order's payment address always equals its delivery address.
+- **(review finding, open - not changed)** After the order is placed, the cart's `AdvancePaymentInfo`
+  (the `original` of the order's cloned payment info) and its billing address stay in the database
+  once the cart is removed - one per advance-payment order, holding the customer's address and
+  email. The platform does the same for cards, where the original is the customer's saved card.
+  Removing it needs care because `PaymentInfo.original` is initial-only. To be decided; any
+  personal-data retention/erasure cleanup must cover these items.
 - ~~With the cart's payment info set, `hasNoPaymentInfo()` is false~~ — **verified false against the
   code, adjusted (decided 2026-10-19):** `hasNoPaymentInfo()` looks at `CartData.paymentInfo`, which
   the platform fills only for a `CreditCardPaymentInfo` (`DefaultCheckoutFacade.getPaymentDetails`,

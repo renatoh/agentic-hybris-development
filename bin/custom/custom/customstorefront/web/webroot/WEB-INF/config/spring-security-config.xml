@@ -157,6 +157,7 @@
 		<property name="cartService" ref="cartService" />
 		<property name="sessionService" ref="sessionService"/>
 		<property name="userService" ref="userService"/>
+		<property name="modelService" ref="modelService"/>
 	</bean>
 
 	<alias name="defaultGuidCookieGenerator" alias="guidCookieGenerator"/>
