@@ -26,6 +26,7 @@ import de.hybris.platform.commercefacades.order.data.CartData;
 import de.hybris.platform.commercefacades.user.data.AddressData;
 import de.hybris.platform.commercefacades.user.data.CountryData;
 import de.hybris.platform.commerceservices.enums.CountryType;
+import com.custom.facades.payment.AdvancePaymentCheckoutFacade;
 import com.custom.storefront.controllers.ControllerConstants;
 
 import java.util.ArrayList;
@@ -63,6 +64,9 @@ public class PaymentMethodCheckoutStepController extends AbstractCheckoutStepCon
 
 	@Resource(name = "addressDataUtil")
 	private AddressDataUtil addressDataUtil;
+
+	@Resource(name = "advancePaymentCheckoutFacade")
+	private AdvancePaymentCheckoutFacade advancePaymentCheckoutFacade;
 
 	@ModelAttribute("billingCountries")
 	public Collection<CountryData> getBillingCountries()
@@ -281,6 +285,24 @@ public class PaymentMethodCheckoutStepController extends AbstractCheckoutStepCon
 		paymentInfoData.setIssueNumber(paymentDetailsForm.getIssueNumber());
 	}
 
+	/**
+	 * NET-8942: the shopper chose advance payment instead of a card. No card data is involved - the
+	 * cart gets the advance payment mode and an AdvancePaymentInfo, and the checkout moves on to the
+	 * summary.
+	 */
+	@RequestMapping(value = "/advance", method = RequestMethod.POST)
+	@RequireHardLogIn
+	public String selectAdvancePayment(final RedirectAttributes redirectAttributes)
+	{
+		if (getAdvancePaymentCheckoutFacade().setAdvancePayment())
+		{
+			return getCheckoutStep().nextStep();
+		}
+		GlobalMessages.addFlashMessage(redirectAttributes, GlobalMessages.ERROR_MESSAGES_HOLDER,
+				"checkout.multi.paymentMethod.advancePayment.notAvailable");
+		return getCheckoutStep().currentStep();
+	}
+
 	@RequestMapping(value = "/remove", method = RequestMethod.POST)
 	@RequireHardLogIn
 	public String remove(@RequestParam(value = "paymentInfoId") final String paymentMethodId,
@@ -339,6 +361,10 @@ public class PaymentMethodCheckoutStepController extends AbstractCheckoutStepCon
 	{
 		model.addAttribute("metaRobots", "noindex,nofollow");
 		model.addAttribute("hasNoPaymentInfo", Boolean.valueOf(getCheckoutFlowFacade().hasNoPaymentInfo()));
+		// NET-8942: offered only while the advance payment mode exists and is active
+		model.addAttribute("advancePaymentMode", getAdvancePaymentCheckoutFacade().getAdvancePaymentMode().orElse(null));
+		model.addAttribute("advancePaymentSelected",
+				Boolean.valueOf(getAdvancePaymentCheckoutFacade().isAdvancePaymentSelected()));
 		prepareDataForPage(model);
 		model.addAttribute(WebConstants.BREADCRUMBS_KEY,
 				getResourceBreadcrumbBuilder().getBreadcrumbs("checkout.multi.paymentMethod.breadcrumb"));
@@ -400,6 +426,11 @@ public class PaymentMethodCheckoutStepController extends AbstractCheckoutStepCon
 	protected CheckoutStep getCheckoutStep()
 	{
 		return getCheckoutStep(PAYMENT_METHOD);
+	}
+
+	protected AdvancePaymentCheckoutFacade getAdvancePaymentCheckoutFacade()
+	{
+		return advancePaymentCheckoutFacade;
 	}
 
 	static

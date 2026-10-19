@@ -43,4 +43,14 @@
 		<property name="product" type="de.hybris.platform.commercefacades.product.data.ProductData"/>
 		<property name="quantity" type="long"/>
 	</bean>
+
+	<!--
+	   NET-8942 (section 5.3): the cart's/order's payment mode, e.g. "advance" with its localized name for the
+	   label. Advance payment has no CCPaymentInfoData - AbstractOrderData.paymentInfo stays empty, as the
+	   platform does for every non-card payment info - so pages use this field to show it. Empty for card
+	   payments (they carry no payment mode).
+	-->
+	<bean class="de.hybris.platform.commercefacades.order.data.AbstractOrderData">
+		<property name="paymentMode" type="de.hybris.platform.commercefacades.order.data.PaymentModeData"/>
+	</bean>
 </beans>

@@ -240,4 +240,53 @@
 		<!-- NET-8943: service entries cannot be saved for later -->
 		<property name="serviceEntryGroupService" ref="serviceEntryGroupService"/>
 	</bean>
+
+	<!--
+	   ============================================================================================
+	   NET-8942 - Advance payment as a payment option
+	   ============================================================================================
+	-->
+	<!-- Takes over acceleratorCheckoutFacade (used by the checkout controllers): advance-payment
+	     methods plus the card-only platform methods it has to override (hasNoPaymentInfo,
+	     authorizePayment, setPaymentDetails, setDefaultPaymentInfoForCheckout). -->
+	<alias alias="acceleratorCheckoutFacade" name="defaultAdvancePaymentCheckoutFacade"/>
+	<alias alias="advancePaymentCheckoutFacade" name="defaultAdvancePaymentCheckoutFacade"/>
+	<bean id="defaultAdvancePaymentCheckoutFacade" class="com.custom.facades.payment.impl.DefaultAdvancePaymentCheckoutFacade"
+	      parent="defaultAcceleratorCheckoutFacade">
+		<property name="paymentModeService" ref="paymentModeService"/>
+		<property name="paymentModeConverter" ref="paymentModeConverter"/>
+		<property name="addressService" ref="addressService"/>
+		<property name="customerEmailResolutionService" ref="customerEmailResolutionService"/>
+	</bean>
+
+	<!-- Takes over checkoutFlowFacade (asked by the step validators for hasNoPaymentInfo()) and
+	     forwards the payment-related methods to the bean above. -->
+	<alias alias="checkoutFlowFacade" name="advancePaymentAwareCheckoutFlowFacade"/>
+	<bean id="advancePaymentAwareCheckoutFlowFacade" class="com.custom.facades.payment.impl.AdvancePaymentAwareCheckoutFlowFacade"
+	      parent="sessionOverrideCheckoutFlowFacade">
+		<property name="checkoutFacadeDelegate" ref="acceleratorCheckoutFacade"/>
+	</bean>
+
+	<!-- AbstractOrderData.paymentMode: the label for advance payment, which has no CCPaymentInfoData -->
+	<alias alias="paymentModeOrderPopulator" name="defaultPaymentModeOrderPopulator"/>
+	<bean id="defaultPaymentModeOrderPopulator" class="com.custom.facades.populators.PaymentModeOrderPopulator">
+		<property name="paymentModeConverter" ref="paymentModeConverter"/>
+	</bean>
+
+	<bean parent="modifyPopulatorList">
+		<property name="list" ref="cartConverter"/>
+		<property name="add" ref="paymentModeOrderPopulator"/>
+	</bean>
+
+	<!-- The checkout facades read the cart through commerceCheckoutCartFacade, which uses
+	     extendedCartConverter - not cartConverter (found on the real summary page). -->
+	<bean parent="modifyPopulatorList">
+		<property name="list" ref="extendedCartConverter"/>
+		<property name="add" ref="paymentModeOrderPopulator"/>
+	</bean>
+
+	<bean parent="modifyPopulatorList">
+		<property name="list" ref="orderConverter"/>
+		<property name="add" ref="paymentModeOrderPopulator"/>
+	</bean>
 </beans>
