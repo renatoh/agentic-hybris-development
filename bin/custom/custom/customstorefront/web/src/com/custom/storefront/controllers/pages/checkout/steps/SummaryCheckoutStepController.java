@@ -22,10 +22,12 @@ import de.hybris.platform.commercefacades.product.data.ProductData;
 import de.hybris.platform.commerceservices.order.CommerceCartModificationException;
 import de.hybris.platform.order.InvalidCartException;
 import de.hybris.platform.payment.AdapterException;
+import com.custom.facades.payment.AdvancePaymentCheckoutFacade;
 import com.custom.storefront.controllers.ControllerConstants;
 
 import java.util.Arrays;
 
+import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 
 import org.apache.commons.lang.StringUtils;
@@ -45,6 +47,10 @@ public class SummaryCheckoutStepController extends AbstractCheckoutStepControlle
 	private static final Logger LOGGER = Logger.getLogger(SummaryCheckoutStepController.class);
 
 	private static final String SUMMARY = "summary";
+	private static final String PAYMENT_METHOD = "payment-method";
+
+	@Resource(name = "advancePaymentCheckoutFacade")
+	private AdvancePaymentCheckoutFacade advancePaymentCheckoutFacade;
 
 	@RequestMapping(value = "/view", method = RequestMethod.GET)
 	@RequireHardLogIn
@@ -72,10 +78,7 @@ public class SummaryCheckoutStepController extends AbstractCheckoutStepControlle
 		model.addAttribute("deliveryMode", cartData.getDeliveryMode());
 		model.addAttribute("paymentInfo", cartData.getPaymentInfo());
 
-		// Only request the security code if the SubscriptionPciOption is set to Default.
-		final boolean requestSecurityCode = CheckoutPciOptionEnum.DEFAULT
-				.equals(getCheckoutFlowFacade().getSubscriptionPciOption());
-		model.addAttribute("requestSecurityCode", Boolean.valueOf(requestSecurityCode));
+		model.addAttribute("requestSecurityCode", Boolean.valueOf(isSecurityCodeRequired()));
 
 		model.addAttribute(new PlaceOrderForm());
 
@@ -108,6 +111,15 @@ public class SummaryCheckoutStepController extends AbstractCheckoutStepControlle
 		{
 			// Invalid cart. Bounce back to the cart page.
 			return REDIRECT_PREFIX + "/cart";
+		}
+
+		// NET-8942: advance payment may have been switched off since the shopper chose it
+		if (getAdvancePaymentCheckoutFacade().isAdvancePaymentSelected()
+				&& !getAdvancePaymentCheckoutFacade().isAdvancePaymentAvailable())
+		{
+			GlobalMessages.addFlashMessage(redirectModel, GlobalMessages.ERROR_MESSAGES_HOLDER,
+					"checkout.multi.paymentMethod.advancePayment.notAvailable");
+			return getCheckoutStep(PAYMENT_METHOD).currentStep();
 		}
 
 		// authorize, if failure occurs don't allow to place the order
@@ -182,9 +194,9 @@ public class SummaryCheckoutStepController extends AbstractCheckoutStepControlle
 		}
 		else
 		{
-			// Only require the Security Code to be entered on the summary page if the SubscriptionPciOption is set to Default.
-			if (CheckoutPciOptionEnum.DEFAULT.equals(getCheckoutFlowFacade().getSubscriptionPciOption())
-					&& StringUtils.isBlank(securityCode))
+			// Only require the Security Code to be entered on the summary page if the SubscriptionPciOption is set to Default
+			// and the shopper pays by card (NET-8942: none for advance payment).
+			if (isSecurityCodeRequired() && StringUtils.isBlank(securityCode))
 			{
 				GlobalMessages.addErrorMessage(model, "checkout.paymentMethod.noSecurityCode");
 				invalid = true;
@@ -238,6 +250,21 @@ public class SummaryCheckoutStepController extends AbstractCheckoutStepControlle
 	protected CheckoutStep getCheckoutStep()
 	{
 		return getCheckoutStep(SUMMARY);
+	}
+
+	/**
+	 * The card security code is only requested with the SubscriptionPciOption Default, and never for advance payment
+	 * (NET-8942).
+	 */
+	protected boolean isSecurityCodeRequired()
+	{
+		return CheckoutPciOptionEnum.DEFAULT.equals(getCheckoutFlowFacade().getSubscriptionPciOption())
+				&& !getAdvancePaymentCheckoutFacade().isAdvancePaymentSelected();
+	}
+
+	protected AdvancePaymentCheckoutFacade getAdvancePaymentCheckoutFacade()
+	{
+		return advancePaymentCheckoutFacade;
 	}
 
 

@@ -306,13 +306,27 @@ public class CheckoutController extends AbstractCheckoutController
 		return ControllerConstants.Views.Pages.Checkout.CheckoutConfirmationPage;
 	}
 
+	/**
+	 * A card order takes the guest's email from the card's billing address. NET-8942: an advance-payment order has no
+	 * paymentInfo on OrderData, so the email is taken from the guest's uid (&lt;guid&gt;|&lt;email&gt;), as
+	 * {@code processOrderCode} already parses it.
+	 */
+	protected String getGuestEmail(final OrderData orderDetails)
+	{
+		if (orderDetails.getPaymentInfo() != null && orderDetails.getPaymentInfo().getBillingAddress() != null)
+		{
+			return orderDetails.getPaymentInfo().getBillingAddress().getEmail();
+		}
+		return StringUtils.substringAfter(orderDetails.getUser().getUid(), "|");
+	}
+
 	protected void processEmailAddress(final Model model, final OrderData orderDetails)
 	{
 		final String email;
 
 		if (orderDetails.isGuestCustomer())
 		{
-			email = orderDetails.getPaymentInfo().getBillingAddress().getEmail();
+			email = getGuestEmail(orderDetails);
 			if (!model.containsAttribute("guestRegisterForm"))
 			{
 				final GuestRegisterForm guestRegisterForm = new GuestRegisterForm();

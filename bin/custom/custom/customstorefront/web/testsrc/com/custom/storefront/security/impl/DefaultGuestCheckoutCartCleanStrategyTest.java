@@ -4,9 +4,15 @@
 package com.custom.storefront.security.impl;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import de.hybris.bootstrap.annotations.UnitTest;
@@ -14,15 +20,20 @@ import de.hybris.platform.acceleratorstorefrontcommons.constants.WebConstants;
 import de.hybris.platform.commerceservices.strategies.impl.DefaultCheckoutCustomerStrategy;
 import de.hybris.platform.core.model.order.CartModel;
 import de.hybris.platform.core.model.order.delivery.DeliveryModeModel;
+import de.hybris.platform.core.model.order.payment.AdvancePaymentInfoModel;
+import de.hybris.platform.core.model.order.payment.CreditCardPaymentInfoModel;
 import de.hybris.platform.core.model.order.payment.PaymentInfoModel;
+import de.hybris.platform.core.model.order.payment.PaymentModeModel;
 import de.hybris.platform.core.model.user.AddressModel;
 import de.hybris.platform.core.model.user.CustomerModel;
 import de.hybris.platform.order.CartService;
+import de.hybris.platform.servicelayer.model.ModelService;
 import de.hybris.platform.servicelayer.session.SessionService;
 import de.hybris.platform.servicelayer.user.UserService;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collection;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -32,6 +43,8 @@ import javax.servlet.http.HttpSession;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.MockitoJUnitRunner;
@@ -71,6 +84,8 @@ public class DefaultGuestCheckoutCartCleanStrategyTest
 	private CartService cartService;
 	@Mock
 	private SessionService sessionService;
+	@Mock
+	private ModelService modelService;
 	@InjectMocks
 	private final DefaultGuestCheckoutCartCleanStrategy guestCheckoutCartCleanStrategy = new DefaultGuestCheckoutCartCleanStrategy();
 
@@ -199,5 +214,82 @@ public class DefaultGuestCheckoutCartCleanStrategyTest
 
 		given(request.getRequestURL()).willReturn(new StringBuffer("https://electronics.local:9002/favicon.ico"));
 		assertEquals(Boolean.TRUE, Boolean.valueOf(guestCheckoutCartCleanStrategy.checkWhetherURLContainsSkipPattern(request)));
+	}
+
+	// --- NET-8942: advance payment on an abandoned guest cart ---
+
+	@Test
+	public void shouldRemoveTheAdvancePaymentInfoOfAnAbandonedGuestCartAfterSavingTheCart()
+	{
+		final AddressModel billingAddress = new AddressModel();
+		final AdvancePaymentInfoModel advancePaymentInfo = new AdvancePaymentInfoModel();
+		advancePaymentInfo.setBillingAddress(billingAddress);
+		final CartModel cart = guestCartWith(advancePaymentInfo);
+		givenAGuestLeavingTheCheckout(cart);
+
+		guestCheckoutCartCleanStrategy.cleanGuestCart(request);
+
+		assertNull(cart.getPaymentInfo());
+		assertNull("the payment mode belongs to the dropped advance payment", cart.getPaymentMode());
+
+		// removed only after the cart no longer references it
+		final InOrder inOrder = inOrder(cartService, modelService);
+		inOrder.verify(cartService).saveOrder(cart);
+		@SuppressWarnings("unchecked")
+		final ArgumentCaptor<Collection<Object>> removed = ArgumentCaptor.forClass(Collection.class);
+		inOrder.verify(modelService).removeAll(removed.capture());
+		assertTrue(removed.getValue().stream().anyMatch(item -> item == advancePaymentInfo));
+		assertTrue(removed.getValue().stream().anyMatch(item -> item == billingAddress));
+	}
+
+	@Test
+	public void shouldNotRemoveTheCardOfAnAbandonedGuestCart()
+	{
+		final CreditCardPaymentInfoModel card = new CreditCardPaymentInfoModel();
+		card.setBillingAddress(new AddressModel());
+		final CartModel cart = guestCartWith(card);
+		givenAGuestLeavingTheCheckout(cart);
+
+		guestCheckoutCartCleanStrategy.cleanGuestCart(request);
+
+		assertNull(cart.getPaymentInfo());
+		verify(cartService).saveOrder(cart);
+		verifyNoInteractions(modelService);
+	}
+
+	@Test
+	public void shouldNotTouchTheAdvancePaymentOfAGuestStillInTheCheckout()
+	{
+		given(sessionService.getAttribute(WebConstants.ANONYMOUS_CHECKOUT)).willReturn(Boolean.TRUE);
+		given(Boolean.valueOf(checkoutCustomerStrategy.isAnonymousCheckout())).willReturn(Boolean.TRUE);
+		given(request.getMethod()).willReturn(HTTP_REQUEST_GET_METHOD);
+		given(request.getRequestURL()).willReturn(
+				new StringBuffer("https://electronics.local:9002/customstorefront/electronics/en/checkout/multi/summary/view"));
+
+		guestCheckoutCartCleanStrategy.cleanGuestCart(request);
+
+		verify(cartService, never()).saveOrder(any(CartModel.class));
+		verifyNoInteractions(modelService);
+	}
+
+	private static CartModel guestCartWith(final PaymentInfoModel paymentInfo)
+	{
+		final PaymentModeModel advanceMode = new PaymentModeModel();
+		advanceMode.setCode("advance");
+		final CartModel cart = new CartModel();
+		cart.setDeliveryAddress(new AddressModel());
+		cart.setPaymentInfo(paymentInfo);
+		cart.setPaymentMode(paymentInfo instanceof AdvancePaymentInfoModel ? advanceMode : null);
+		return cart;
+	}
+
+	private void givenAGuestLeavingTheCheckout(final CartModel cart)
+	{
+		given(sessionService.getAttribute(WebConstants.ANONYMOUS_CHECKOUT)).willReturn(Boolean.TRUE);
+		given(Boolean.valueOf(checkoutCustomerStrategy.isAnonymousCheckout())).willReturn(Boolean.TRUE);
+		given(request.getMethod()).willReturn(HTTP_REQUEST_GET_METHOD);
+		given(request.getRequestURL()).willReturn(new StringBuffer(
+				"https://electronics.local:9002/customstorefront/electronics/en/Open-Catalogue/Cameras/p/1934793"));
+		given(cartService.getSessionCart()).willReturn(cart);
 	}
 }

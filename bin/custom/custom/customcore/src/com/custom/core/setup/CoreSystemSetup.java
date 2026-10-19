@@ -38,6 +38,8 @@ public class CoreSystemSetup extends AbstractSystemSetup
 		importImpexFile(context, "/customcore/import/common/essential-data.impex");
 		importImpexFile(context, "/customcore/import/common/countries.impex");
 		importImpexFile(context, "/customcore/import/common/delivery-modes.impex");
+		// NET-8942: advance payment mode
+		importImpexFile(context, "/customcore/import/common/payment-modes.impex");
 
 		importImpexFile(context, "/customcore/import/common/themes.impex");
 		importImpexFile(context, "/customcore/import/common/user-groups.impex");
