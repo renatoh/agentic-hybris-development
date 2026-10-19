@@ -130,55 +130,6 @@
         
         
         <requires-extension name="profiletagaddon"/>
-                                                                                        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        <requires-extension name="personalizationyprofilesampledataaddon"/>
-                                                                                                
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        <requires-extension name="personalizationsampledataaddon"/>
-                                                                                                        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        <requires-extension name="personalizationaddon"/>
-                                                                                                                
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
         <requires-extension name="pcmbackofficesamplesaddon"/>
                                                                                                                         
         

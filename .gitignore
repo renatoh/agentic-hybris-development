@@ -25,3 +25,4 @@
 **/.DS_Store
 *.class
 *.log
+bin/custom/**/resources/**/*testclasses.xml
