@@ -5,6 +5,35 @@
 <items xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:noNamespaceSchemaLocation="items.xsd">
 
+	<relations>
+
+		<!--
+		   NET-8941 - customer is attached via a real <relation>, not a plain FK attribute (spec
+		   section 5.1a): Backoffice discoverability (CustomerModel.getSavedForLaterEntries() as a
+		   normal related-items tab) and customer-data-lifecycle/GDPR deletion reasons. Shape and the
+		   explicit index (on the SavedForLaterEntry itemtype below) mirror the platform's own
+		   AbstractOrder2AbstractOrderEntry relation (core-items.xml) - hybris does not auto-index a
+		   relation-derived FK.
+
+		   partof="true" on the target element (PR review): a customer's saved entries must not
+		   outlive the customer, and this modifier is exactly what drives the platform's own
+		   cascade-on-remove mechanism (PartOfModelRegisterForRemoveInterceptor) - verified against
+		   AbstractOrder2AbstractOrderEntry, which carries the same modifier for the same reason.
+		   Removing a Customer now cascades deletion of their SavedForLaterEntry rows without a
+		   custom RemoveInterceptor.
+		-->
+		<relation code="Customer2SavedForLaterEntryRelation" localized="false">
+			<sourceElement type="Customer" qualifier="customer" cardinality="one">
+				<modifiers read="true" write="true" search="true" optional="false"/>
+			</sourceElement>
+			<targetElement type="SavedForLaterEntry" qualifier="savedForLaterEntries" cardinality="many"
+			               collectiontype="list">
+				<modifiers read="true" write="false" search="true" optional="true" partof="true"/>
+			</targetElement>
+		</relation>
+
+	</relations>
+
 	<itemtypes>
 
 		<!--
@@ -65,6 +94,40 @@
 					</description>
 				</attribute>
 			</attributes>
+		</itemtype>
+
+		<!--
+		   ====================================================================================
+		   NET-8941 - Save cart items for later
+		   ====================================================================================
+		   Dedicated persistent item type (spec section 5.1) - a small, standalone type rather than
+		   a hidden second CartModel per customer, so it carries none of the checkout/order/promotion
+		   surface area the platform's own Saved Carts feature (CartEntryActionHandler) would drag in.
+		   No baseStore attribute (spec section 5.3) - store-scope is derived at read time from the
+		   product's own catalogVersion instead of a redundant, driftable stored field.
+		-->
+		<itemtype code="SavedForLaterEntry" autocreate="true" generate="true">
+			<deployment table="SavedForLaterEntries" typecode="30001"/>
+			<attributes>
+				<attribute qualifier="product" type="Product">
+					<persistence type="property"/>
+					<modifiers optional="false"/>
+				</attribute>
+				<attribute qualifier="quantity" type="java.lang.Long">
+					<persistence type="property"/>
+					<modifiers optional="false"/>
+					<description>The quantity that was in the cart at the moment it was saved.</description>
+				</attribute>
+				<attribute qualifier="dateSaved" type="java.util.Date">
+					<persistence type="property"/>
+					<modifiers optional="true"/>
+				</attribute>
+			</attributes>
+			<indexes>
+				<index name="idx_SavedForLater_Customer">
+					<key attribute="customer"/>
+				</index>
+			</indexes>
 		</itemtype>
 
 	</itemtypes>
